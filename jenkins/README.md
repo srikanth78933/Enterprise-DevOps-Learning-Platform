@@ -61,8 +61,10 @@ the Jenkins image does not ship it by default.)
 
 ## 6. Update the image name
 
-Edit `BACKEND_IMAGE` at the top of the root `Jenkinsfile` to your own
-Docker Hub namespace before running the pipeline against a real registry.
+`BACKEND_IMAGE` at the top of the root `Jenkinsfile` is already set to
+this deployment's real Docker Hub namespace (`devopstraining064`) — if
+you're forking this for your own registry, edit it to your own namespace
+before running the pipeline.
 
 ## 7. Create the pipeline job
 

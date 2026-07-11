@@ -10,6 +10,10 @@
 // credentials, kubectl/aws CLI on the agent) this project requires on top
 // of project 1's. (Frontend build/deploy isn't part of this branch - see
 // architecture/README.md for why.)
+//
+// Wired to this deployment's actual infrastructure:
+//   - Docker Hub:   docker.io/devopstraining064
+//   - EKS cluster:  eks-cluster (eu-west-3)
 
 pipeline {
     agent any
@@ -36,8 +40,7 @@ pipeline {
         EKS_CLUSTER_NAME = 'eks-cluster'
         K8S_NAMESPACE   = 'enterprise-devops'
 
-        // Replace with your own Docker Hub namespace before running against a real registry.
-        BACKEND_IMAGE   = 'yourdockerhubuser/enterprise-devops-backend'
+        BACKEND_IMAGE   = 'devopstraining064/enterprise-devops-backend'
     }
 
     stages {
