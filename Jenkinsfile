@@ -1,16 +1,15 @@
-// Project 1 - Enterprise CI Pipeline
+// Project 2 - CD to AWS EKS
 //
-// Flow: Git -> Checkout -> Maven Build -> Unit Test -> SonarQube -> Quality Gate
-//       -> Parallel Stage -> Package Jar -> Docker Build -> Push Docker Image
+// Flow: Git -> Jenkins -> Checkout -> Maven Build -> Unit Test -> SonarQube
+//       -> Quality Gate -> Parallel Stage -> Package Jar -> Frontend Build
+//       -> Docker Build (backend + frontend) -> Push Docker Images
+//       -> Deploy to EKS -> Verify
 //
-// Prerequisites (see jenkins/README.md for full setup):
-//   - Jenkins tools configured: JDK named "jdk21", Maven named "maven3"
-//   - Jenkins credentials: "dockerhub-credentials" (username/password), scoped to this pipeline
-//   - A SonarQube server configured in Jenkins named "sonarqube-server", with the
-//     SonarQube Scanner for Jenkins plugin installed and a webhook back to Jenkins
-//     for the quality gate to report asynchronously (Manage Jenkins > System > SonarQube servers)
-//   - docker CLI available on the Jenkins agent, logged-in-capable (docker.sock mounted
-//     if the agent itself runs in a container)
+// New in this project vs. project-01-ci-pipeline: the pipeline now also
+// builds/tests the frontend, builds and pushes a second image, and deploys
+// both to a Terraform-provisioned EKS cluster. See jenkins/README.md for
+// the additional one-time setup (AWS credentials, kubectl/aws CLI on the
+// agent) this project requires on top of project 1's.
 
 pipeline {
     agent any
@@ -24,15 +23,23 @@ pipeline {
         timestamps()
         buildDiscarder(logRotator(numToKeepStr: '20'))
         disableConcurrentBuilds()
-        timeout(time: 45, unit: 'MINUTES')
+        timeout(time: 60, unit: 'MINUTES')
     }
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        SONARQUBE_ENV         = 'sonarqube-server'
+        AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
+        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
+
+        SONARQUBE_ENV   = 'sonarqube-server'
+        AWS_REGION      = 'us-east-1'
+        EKS_CLUSTER_NAME = 'enterprise-devops-dev-eks'
+        K8S_NAMESPACE   = 'enterprise-devops'
+
         // Replace with your own Docker Hub namespace before running against a real registry.
-        IMAGE_NAME            = 'yourdockerhubuser/enterprise-devops-backend'
-        IMAGE_TAG             = "${env.BUILD_NUMBER}"
+        BACKEND_IMAGE   = 'yourdockerhubuser/enterprise-devops-backend'
+        FRONTEND_IMAGE  = 'yourdockerhubuser/enterprise-devops-frontend'
+        IMAGE_TAG       = "${env.BUILD_NUMBER}"
     }
 
     stages {
@@ -76,8 +83,6 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                // Waits for the webhook callback from SonarQube. Aborts the build
-                // if coverage, duplication, or new-code issue thresholds are breached.
                 timeout(time: 10, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
@@ -116,26 +121,74 @@ pipeline {
             }
         }
 
-        stage('Docker Build') {
+        stage('Frontend Build') {
             steps {
-                sh """
-                    docker build \
-                        -f docker/backend-ci.Dockerfile \
-                        -t ${IMAGE_NAME}:${IMAGE_TAG} \
-                        -t ${IMAGE_NAME}:latest \
-                        .
-                """
+                dir('frontend') {
+                    sh 'npm ci'
+                    sh 'CI=true npm test'
+                    sh 'CI=true npm run build'
+                }
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Docker Build') {
+            parallel {
+                stage('Backend Image') {
+                    steps {
+                        sh """
+                            docker build -f docker/backend-ci.Dockerfile \
+                                -t ${BACKEND_IMAGE}:${IMAGE_TAG} -t ${BACKEND_IMAGE}:latest .
+                        """
+                    }
+                }
+                stage('Frontend Image') {
+                    steps {
+                        sh """
+                            docker build -f docker/frontend-ci.Dockerfile \
+                                -t ${FRONTEND_IMAGE}:${IMAGE_TAG} -t ${FRONTEND_IMAGE}:latest .
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Push Docker Images') {
             steps {
                 sh '''
                     echo "$DOCKERHUB_CREDENTIALS_PSW" | docker login -u "$DOCKERHUB_CREDENTIALS_USR" --password-stdin
                 '''
-                sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
-                sh "docker push ${IMAGE_NAME}:latest"
+                sh "docker push ${BACKEND_IMAGE}:${IMAGE_TAG}"
+                sh "docker push ${BACKEND_IMAGE}:latest"
+                sh "docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}"
+                sh "docker push ${FRONTEND_IMAGE}:latest"
                 sh 'docker logout'
+            }
+        }
+
+        stage('Deploy to EKS') {
+            steps {
+                sh """
+                    aws eks update-kubeconfig --name ${EKS_CLUSTER_NAME} --region ${AWS_REGION}
+
+                    kubectl apply -k kubernetes/
+
+                    kubectl set image deployment/backend backend=${BACKEND_IMAGE}:${IMAGE_TAG} \
+                        -n ${K8S_NAMESPACE}
+                    kubectl set image deployment/frontend frontend=${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                        -n ${K8S_NAMESPACE}
+                """
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                sh """
+                    kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=180s
+                    kubectl rollout status deployment/frontend -n ${K8S_NAMESPACE} --timeout=180s
+                """
+                script {
+                    sh './scripts/verify-deployment.sh'
+                }
             }
         }
     }
@@ -145,7 +198,7 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Pipeline succeeded. Image published: ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "Deployed ${BACKEND_IMAGE}:${IMAGE_TAG} and ${FRONTEND_IMAGE}:${IMAGE_TAG} to ${EKS_CLUSTER_NAME}"
         }
         failure {
             echo 'Pipeline failed - see docs/06-Troubleshooting.md for common causes.'

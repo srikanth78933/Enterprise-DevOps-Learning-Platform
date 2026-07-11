@@ -1,35 +1,48 @@
-# Architecture — Project 1: Enterprise CI Pipeline
+# Architecture — Project 2: CD to AWS EKS
 
-This project adds a Continuous Integration pipeline in front of the base
-application from `main`. No application code changes — the backend is
-identical to `main`; only build/quality/packaging automation is new.
+This project takes Project 1's CI pipeline and extends it into full CI/CD:
+the same application now runs on a real (Terraform-provisioned) AWS EKS
+cluster, with both the backend and frontend built, pushed, and deployed by
+Jenkins.
 
-See [`pipeline-diagram.md`](./pipeline-diagram.md) for the full Mermaid
-flow diagram of every Jenkinsfile stage.
+See:
+- [`aws-infrastructure.md`](./aws-infrastructure.md) — what Terraform builds
+- [`pipeline-diagram.md`](./pipeline-diagram.md) — the full extended pipeline
 
-## What's new vs. `main`
+## What's new vs. project-01-ci-pipeline
 
 | Added | Purpose |
 |---|---|
-| `Jenkinsfile` | Orchestrates the whole CI flow |
-| `docker/backend-ci.Dockerfile` | Packages the Jenkins-built jar (no rebuild inside Docker) |
-| `jenkins/` | Controller setup docs, plugin list, Maven settings template |
-| `sonar-maven-plugin` in `backend/pom.xml` | Enables `mvn sonar:sonar` |
+| `terraform/` | VPC, IAM, EKS cluster + managed node group |
+| `kubernetes/` | Namespace, ConfigMaps, Secrets template, MySQL/backend/frontend Deployments, HPA, VPA, Ingress, Kustomization |
+| `docker/frontend-ci.Dockerfile` | Packages the Jenkins-built frontend bundle (same reasoning as `backend-ci.Dockerfile`) |
+| `Jenkinsfile` stages: Frontend Build, Docker Build (parallel), Push Docker Images (x2), Deploy to EKS, Verify | Full CD |
+| `scripts/terraform-init-apply.sh`, `configure-kubeconfig.sh`, `deploy-to-eks.sh`, `verify-deployment.sh`, `terraform-destroy.sh` | Local equivalents of what Jenkins now automates |
 
-## Why the CI Dockerfile differs from the dev one
+## Key design decisions
 
-`docker/backend.Dockerfile` (from `main`) is a multi-stage build that runs
-Maven *inside* Docker — convenient for `docker compose up` on a laptop where
-nothing is pre-built. In a CI pipeline that's wasteful and risky: Jenkins
-already compiled, tested, and packaged the jar in the "Package Jar" stage,
-so rebuilding it again inside Docker means testing a different artifact
-than the one that will actually ship. `backend-ci.Dockerfile` just takes the
-already-validated jar and wraps it in a minimal runtime image.
+- **`kubectl apply -k` before `kubectl set image`.** The kustomization
+  provides the stable baseline (namespace, config, services, HPA, ingress);
+  `set image` is a fast, targeted way to bump exactly two container images
+  per deploy without re-templating the whole manifest set. See the sequence
+  diagram in `pipeline-diagram.md`.
+- **MySQL as a single-replica Deployment + PVC, not a StatefulSet.** A
+  StatefulSet's ordered/stable-identity guarantees matter for multi-node
+  stateful clusters (which is what Project 5's Elasticsearch actually
+  needs). A single MySQL replica gets nothing from that machinery — a
+  Deployment with `strategy.type: Recreate` (never two pods writing to the
+  same volume at once) is simpler and equally correct here.
+- **Secrets are never templated through Terraform or committed to git.**
+  `kubernetes/secret.example.yaml` is a template; real secrets are created
+  imperatively via `kubectl create secret ... --dry-run=client -o yaml |
+  kubectl apply -f -`, and in Jenkins, sourced from Jenkins Credentials.
+- **AWS credentials reach Jenkins via two `Secret text` credentials**
+  (`aws-access-key-id`, `aws-secret-access-key`), not a heavier AWS
+  Credentials plugin — fewer moving parts for a learning environment, at
+  the cost of not supporting STS AssumeRole chains (a Project 10 concern).
 
-## Why Quality Gate is a separate stage from SonarQube Analysis
+## Next branch
 
-`sonar:sonar` submits the analysis and returns immediately — SonarQube
-computes the quality gate result asynchronously and calls back via webhook.
-Splitting them lets the pipeline show a clean "Quality Gate" stage in the
-Blue Ocean / classic stage view distinctly from the (fast) analysis
-submission, and lets `waitForQualityGate` time out independently.
+`project-03-cicd-helm-microservices` replaces these raw manifests with a
+Helm umbrella chart and splits this single Jenkinsfile into independent
+frontend/backend pipelines.

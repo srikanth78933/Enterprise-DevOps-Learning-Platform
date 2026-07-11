@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: enterprise-devops
+  labels:
+    app.kubernetes.io/part-of: enterprise-devops-platform
+    environment: dev

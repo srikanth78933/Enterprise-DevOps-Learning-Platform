@@ -1,59 +1,64 @@
-# Step-by-Step Walkthrough — Project 1: Enterprise CI Pipeline
+# Step-by-Step Walkthrough — Project 2: CD to AWS EKS
 
-## 1. Trigger a clean build
+## 1. Confirm the baseline deploy works
 
-Make a trivial change (e.g. a comment) in `backend/src/main/java/.../HealthController.java`,
-commit, and push. If you configured a webhook, Jenkins builds automatically;
-otherwise click **Build Now**.
-
-## 2. Watch the Unit Test stage
-
-Open the build's **Test Result** page once the "Unit Test" stage completes.
-You should see all 26 tests (`DepartmentControllerTest`,
-`DepartmentServiceTest`, `EmployeeServiceTest`, `ProjectServiceTest`) passing.
-
-## 3. Break a test on purpose
-
-Edit `backend/src/test/java/.../DepartmentServiceTest.java` and change an
-`assertThat(...)` to an obviously wrong expectation. Push it.
-
-- The pipeline should fail at **Unit Test**
-- **SonarQube Analysis**, **Quality Gate**, and every later stage should be
-  skipped — Jenkins declarative pipelines stop at the first failed stage by
-  default
-- Revert the change and push again to confirm it goes green
-
-## 4. Break the Quality Gate on purpose
-
-Temporarily lower test coverage (comment out a chunk of
-`EmployeeServiceTest`) without deleting the code it tests. Push it.
-
-- Unit Test still passes (fewer assertions, but no failures)
-- **SonarQube Analysis** succeeds (analysis always "succeeds" — it's just a
-  report)
-- **Quality Gate** fails because coverage on new code dropped below the
-  default threshold (80% on Sonar's default "Sonar way" gate)
-- Confirm the pipeline aborts and no Docker image gets pushed for this
-  build — revert and push again
-
-## 5. Inspect the Parallel Stage
-
-Open the Stage View for a successful build — "Publish Coverage Report" and
-"Dependency Tree Audit" should show as running concurrently, both nested
-under "Parallel Stage".
-
-## 6. Confirm the pushed image runs
+After following `docs/03-Installation.md` end to end, confirm all pods are
+healthy:
 
 ```bash
-docker pull <your-namespace>/enterprise-devops-backend:latest
-docker run --rm -p 8080:8080 \
-  -e DB_URL=jdbc:mysql://host.docker.internal:3306/enterprise_devops \
-  -e DB_USERNAME=devops_user -e DB_PASSWORD=devops_pass \
-  <your-namespace>/enterprise-devops-backend:latest
-
-curl http://localhost:8080/actuator/health
+kubectl get pods -n enterprise-devops
 ```
+
+Expect: 1 `mysql-*` pod, 2 `backend-*` pods, 2 `frontend-*` pods, all
+`Running` and `1/1 Ready`.
+
+## 2. Exercise the app through the Ingress
+
+Using the load balancer hostname from step 3 of Installation, open
+`http://<lb-hostname>/` with a browser plugin or `curl -H "Host: ..."` (real
+DNS isn't configured for the placeholder `enterprise-devops.example.com`
+host used in `ingress.yaml`) and walk through the same CRUD flow as
+`main`'s `docs/04-Step-by-Step.md` — create a department, an employee, a
+project.
+
+## 3. Watch the HPA under load
+
+```bash
+kubectl get hpa -n enterprise-devops -w
+```
+
+In another terminal, generate load against the backend:
+
+```bash
+kubectl run load-generator --image=busybox --restart=Never -n enterprise-devops -- \
+  /bin/sh -c "while true; do wget -q -O- http://backend:8080/api/employees; done"
+```
+
+Watch `CURRENT` CPU climb past the 70% target and `REPLICAS` scale up
+toward 6. Clean up afterward: `kubectl delete pod load-generator -n enterprise-devops`.
+
+## 4. Trigger a real deploy through Jenkins
+
+Push a trivial backend change (as in Project 1's walkthrough) and let the
+full pipeline run. Watch the **Deploy to EKS** and **Verify** stages in the
+Jenkins console — you should see the rolling update happen with zero
+downtime (old pods stay serving traffic until new ones pass their
+readiness probe).
+
+## 5. Confirm zero-downtime deploys
+
+While a deploy is in progress (`kubectl rollout status deployment/backend
+-n enterprise-devops`), hit the health endpoint in a tight loop from
+another terminal:
+
+```bash
+while true; do curl -s -o /dev/null -w "%{http_code}\n" \
+  -H "Host: enterprise-devops.example.com" http://<lb-hostname>/api/health; sleep 0.5; done
+```
+
+You should see a continuous stream of `200`s with no gaps, even as pods
+roll.
 
 ## Next
 
-Continue to [05-Flow.md](./05-Flow.md) for what's happening inside each stage.
+Continue to [05-Flow.md](./05-Flow.md).

@@ -1,0 +1,23 @@
+# Requires the Vertical Pod Autoscaler controller, which is NOT part of EKS
+# by default (unlike the Metrics Server used by the HPA). Install it first:
+#   https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler
+#
+# updateMode is deliberately "Off" (recommendation-only). "Auto" mode
+# evicts and restarts pods to apply new resource requests, which fights
+# with the HPA in backend-hpa.yaml and can cause a restart loop under
+# load. Use "Off" to observe recommendations in `kubectl describe vpa
+# backend-vpa`, and only graduate to "Auto"/"Initial" once you understand
+# how it interacts with the HPA on the same Deployment.
+
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: backend-vpa
+  namespace: enterprise-devops
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  updatePolicy:
+    updateMode: "Off"

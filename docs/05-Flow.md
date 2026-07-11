@@ -1,46 +1,52 @@
-# Pipeline Flow — Project 1: Enterprise CI Pipeline
+# Pipeline & Deploy Flow — Project 2: CD to AWS EKS
 
 Full diagrams: [`/architecture/pipeline-diagram.md`](../architecture/pipeline-diagram.md).
 
-## Stage-by-stage
+## New stages vs. Project 1
 
 | Stage | Command | Fails the build if... |
 |---|---|---|
-| Checkout | `checkout scm` | Repo unreachable / bad credentials |
-| Maven Build | `mvn clean compile` | Code doesn't compile |
-| Unit Test | `mvn test` | Any JUnit/Mockito test fails |
-| SonarQube Analysis | `mvn sonar:sonar` | SonarQube server unreachable (analysis itself doesn't "fail" on code smells) |
-| Quality Gate | `waitForQualityGate abortPipeline: true` | Coverage/duplication/new-issue thresholds breached, or 10-minute timeout with no webhook response |
-| Parallel Stage | Jacoco publish + `mvn dependency:tree` | Either branch erroring |
-| Package Jar | `mvn package -DskipTests` | Packaging error (tests already ran, no need to re-run) |
-| Docker Build | `docker build -f docker/backend-ci.Dockerfile` | Missing jar, Dockerfile syntax error |
-| Push Docker Image | `docker push` (x2 tags) | Bad Docker Hub credentials, network failure |
+| Frontend Build | `npm ci && npm test && npm run build` | Jest tests fail or the build errors |
+| Docker Build (parallel) | `docker build` x2 | Either Dockerfile fails |
+| Push Docker Images | `docker push` x4 (2 tags x 2 images) | Docker Hub auth/network failure |
+| Deploy to EKS | `aws eks update-kubeconfig` → `kubectl apply -k` → `kubectl set image` x2 | AWS auth failure, cluster unreachable, invalid manifest |
+| Verify | `kubectl rollout status` x2, then `scripts/verify-deployment.sh` | Rollout doesn't complete in 180s, or the smoke test curl fails |
 
-## Why `-DskipTests` on Package Jar
+## Why `kubectl apply -k` then `kubectl set image` (not one step)
 
-Tests already ran and were verified in the **Unit Test** stage. Re-running
-them during packaging would double the pipeline's total time for zero new
-information — `-DskipTests` skips test *execution* while still requiring
-test *code* to compile (unlike `-Dmaven.test.skip=true`, which skips both).
+`kubectl apply -k kubernetes/` is declarative and idempotent — it
+reconciles the *shape* of the cluster (namespace exists, configmap is
+current, services/HPA/ingress exist) but the `images:` block in
+`kustomization.yaml` only pins a fallback tag (`latest`). `kubectl set
+image` then does one focused, auditable thing: point the two Deployments
+at this specific build's images. Splitting these means a manifest change
+(e.g. adjusting HPA thresholds) and an image bump are always independently
+diagnosable in `kubectl rollout history`.
 
-## Credential flow
+## Rolling update mechanics
+
+Neither Deployment manifest sets a custom `strategy` for backend/frontend,
+so both use Kubernetes' default `RollingUpdate` (`maxUnavailable: 25%,
+maxSurge: 25%`). Combined with the `readinessProbe` on both, this is what
+makes the zero-downtime behavior in `docs/04-Step-by-Step.md` step 5 work:
+Kubernetes won't route traffic to a new pod, or terminate an old one, until
+the readiness probe says so.
+
+## Credential flow (new: AWS)
 
 ```mermaid
 sequenceDiagram
     participant JF as Jenkinsfile
     participant JC as Jenkins Credential Store
-    participant DH as Docker Hub
+    participant AWS as AWS STS
+    participant EKS as EKS API Server
 
-    JF->>JC: credentials('dockerhub-credentials')
-    JC-->>JF: DOCKERHUB_CREDENTIALS_USR / _PSW (masked in logs)
-    JF->>DH: docker login (password via stdin, never as a CLI arg)
-    DH-->>JF: login succeeded
-    JF->>DH: docker push image:tag
+    JF->>JC: credentials('aws-access-key-id' / 'aws-secret-access-key')
+    JC-->>JF: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (masked in logs)
+    JF->>AWS: aws eks update-kubeconfig (uses env credentials implicitly)
+    AWS-->>JF: kubeconfig for the cluster
+    JF->>EKS: kubectl apply -k / kubectl set image (authenticated via the kubeconfig)
 ```
-
-Passwords are piped via stdin (`echo "$PSW" | docker login ... --password-stdin`)
-rather than passed as a `-p` flag, which would leak into `ps` output and
-shell history on the agent.
 
 ## Next
 

@@ -1,0 +1,33 @@
+# Requires the NGINX Ingress Controller installed on the cluster (not part
+# of EKS by default) - see docs/03-Installation.md for the one-line Helm
+# install. It provisions an AWS Network Load Balancer for you.
+#
+# No path rewriting: the backend's controllers are already mapped under
+# /api/** (see backend/src/.../controller/*.java), so /api requests pass
+# through unchanged. Only routing is needed here, not rewriting.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: enterprise-devops-ingress
+  namespace: enterprise-devops
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: enterprise-devops.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

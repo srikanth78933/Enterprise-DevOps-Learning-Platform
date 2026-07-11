@@ -1,59 +1,86 @@
-# Installation — Project 1: Enterprise CI Pipeline
+# Installation — Project 2: CD to AWS EKS
 
-## 1. Run Jenkins locally
-
-```bash
-docker volume create jenkins_home
-docker run -d --name jenkins \
-  -v jenkins_home:/var/jenkins_home \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -p 8080:8080 -p 50000:50000 \
-  jenkins/jenkins:lts
-
-# Install the docker CLI inside the container so the pipeline's `docker build` works
-docker exec -u root jenkins sh -c "apt-get update && apt-get install -y docker.io"
-
-# First-run admin password
-docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
-```
-
-Visit http://localhost:8080, unlock with the password above, install
-suggested plugins, then follow [`jenkins/README.md`](../jenkins/README.md)
-for the CI-specific setup (plugins, tools, SonarQube server, Docker Hub
-credentials).
-
-## 2. Run SonarQube locally
+## 1. Provision the infrastructure
 
 ```bash
-./scripts/run-sonar-local.sh
+./scripts/terraform-init-apply.sh
 ```
 
-Run it once to start the container, log in to http://localhost:9000
-(default `admin`/`admin`, you'll be forced to change it), generate a token
-under **My Account → Security**, then re-run with `SONAR_TOKEN=<token>`.
+Review the plan carefully before confirming — this creates real AWS
+resources. Takes 10-15 minutes (EKS control plane provisioning is slow).
 
-## 3. Create the Jenkins pipeline job
+## 2. Point kubectl at the new cluster
 
-- New Item → name it `enterprise-ci-pipeline` → Pipeline
-- Pipeline section → Definition: "Pipeline script from SCM"
-- SCM: Git → your repo URL → Branch: `*/project-01-ci-pipeline`
-- Script Path: `Jenkinsfile`
-- Save, then **Build Now**
+```bash
+./scripts/configure-kubeconfig.sh
+kubectl get nodes
+```
 
-## 4. Watch it run
+You should see 2 nodes in `Ready` state.
 
-Open the build → Console Output, or the classic Stage View, and watch the
-pipeline move through Checkout → Maven Build → Unit Test → SonarQube →
-Quality Gate → Parallel Stage → Package Jar → Docker Build → Push Docker
-Image.
+## 3. Enable the Metrics Server (required for HPA)
 
-## Verifying the install
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
 
-- SonarQube dashboard shows a project named `enterprise-devops-backend`
-  with a green quality gate
-- Docker Hub shows a new image at `<your-namespace>/enterprise-devops-backend`
-  tagged with both the Jenkins build number and `latest`
-- The Jenkins build's "Test Result" trend shows 26 passing tests
+## 4. Install the NGINX Ingress Controller (required for Ingress)
+
+```bash
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace
+```
+
+This provisions an AWS Network Load Balancer — wait for an external
+address:
+
+```bash
+kubectl get svc -n ingress-nginx ingress-nginx-controller -w
+```
+
+## 5. Create the real secrets (never commit these)
+
+```bash
+kubectl create namespace enterprise-devops --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic backend-secret -n enterprise-devops \
+  --from-literal=DB_USERNAME=devops_user \
+  --from-literal=DB_PASSWORD='<choose-a-strong-password>' \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic mysql-secret -n enterprise-devops \
+  --from-literal=MYSQL_USER=devops_user \
+  --from-literal=MYSQL_PASSWORD='<same-password-as-above>' \
+  --from-literal=MYSQL_ROOT_PASSWORD='<choose-a-strong-root-password>' \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+## 6. Deploy the application
+
+Either manually:
+
+```bash
+./scripts/deploy-to-eks.sh latest
+```
+
+...or extend your Project 1 Jenkins setup per [`jenkins/README.md`](../jenkins/README.md)
+(steps 8-10 are new) and trigger the pipeline job pointed at this branch.
+
+## 7. Verify
+
+```bash
+./scripts/verify-deployment.sh
+```
+
+Or manually, once you have the Ingress load balancer's hostname
+(`kubectl get ingress -n enterprise-devops`):
+
+```bash
+curl -H "Host: enterprise-devops.example.com" http://<lb-hostname>/api/health
+curl -H "Host: enterprise-devops.example.com" http://<lb-hostname>/
+```
 
 ## Next
 

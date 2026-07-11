@@ -1,37 +1,45 @@
-# Student Assignments — Project 1: Enterprise CI Pipeline
+# Student Assignments — Project 2: CD to AWS EKS
 
 ## Beginner
 
-1. Add a `Checkstyle` or `Spotless` stage between **Maven Build** and
-   **Unit Test** that fails the pipeline on formatting violations. Document
-   which plugin you chose and why in a short note in your PR.
-2. Change `IMAGE_TAG` to also include the short Git commit SHA (e.g.
-   `42-a1b2c3d`) instead of just the build number, so an image tag alone
-   tells you exactly what commit it came from.
+1. Change `node_desired_size`/`node_min_size`/`node_max_size` in
+   `terraform.tfvars` to run a single-node cluster (cheaper for solo
+   learning) and re-apply. Explain in a short note what breaks (hint:
+   `backend-hpa.yaml`'s `minReplicas: 2` plus pod anti-affinity you don't
+   have yet).
+2. Add a `readinessProbe`/`livenessProbe` tuning pass: the current
+   `initialDelaySeconds` values are guesses. Measure actual backend startup
+   time (`kubectl logs` timestamps) and set values that are neither too
+   eager (probe fails before the app is up) nor too lax (slow failure
+   detection).
 
 ## Intermediate
 
-3. Add a `Trivy` image scan stage after **Docker Build** that fails the
-   pipeline on any `CRITICAL` vulnerability, before the push stage runs.
-   (This is a preview of Project 4 — don't worry about making it perfect.)
-4. Make the pipeline post a Slack or email notification on failure only
-   (not on every success) using the `post { failure { ... } }` block.
-5. Parameterize the Jenkinsfile so `IMAGE_NAME` and `SONARQUBE_ENV` can be
-   overridden at build time instead of hardcoded, without breaking the
-   default values used by CI.
+3. Add a second NAT Gateway (one per AZ) to `terraform/modules/vpc/` and
+   update the private route tables accordingly, so an AZ outage doesn't
+   take down outbound connectivity for the other AZ's nodes. Document the
+   cost difference in your PR.
+4. Write a `PodDisruptionBudget` for the `backend` Deployment that
+   guarantees at least 1 pod stays available during voluntary disruptions
+   (like a node drain), and test it by draining a node while watching pod
+   status.
+5. The `mysql-secret`/`backend-secret` creation commands in
+   `docs/03-Installation.md` are manual. Write a script that generates
+   random strong passwords and creates both secrets consistently (so they
+   never drift out of sync) in one step.
 
 ## Advanced
 
-6. Convert the repeated `dir('backend') { sh '...' }` pattern into a
-   Jenkins Shared Library function, and rewrite the Jenkinsfile to call it.
-   Explain in your PR why shared libraries matter once you have more than
-   one pipeline in an organization.
-7. Add a manual approval gate (`input` step) before **Push Docker Image**
-   that only appears on the `project-01-ci-pipeline` branch itself (not on
-   feature branches building via multibranch pipeline) — research
-   `when { branch '...' }` conditions to do this cleanly.
+6. Replace the static IAM user credentials (`aws-access-key-id`/
+   `aws-secret-access-key`) with an OIDC-federated Jenkins identity that
+   assumes a role via STS, eliminating long-lived credentials from Jenkins
+   entirely. Document the IAM trust policy you used.
+7. Add a `terraform plan` stage to the Jenkinsfile that runs on every PR
+   (posting the plan as a PR comment) without ever running `apply`
+   automatically — infrastructure changes should be human-approved. Decide
+   and justify where the approval gate goes.
 
 ## Submission
 
-Open a PR against `project-01-ci-pipeline`. Include a screenshot of a
-passing pipeline run and, for assignment 3 or 6, the relevant stage output.
+Open a PR against `project-02-cd-eks`. Include `kubectl get pods,hpa,ingress
+-n enterprise-devops` output showing a healthy deployment.

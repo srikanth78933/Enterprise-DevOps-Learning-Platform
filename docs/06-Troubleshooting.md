@@ -1,46 +1,66 @@
-# Troubleshooting — Project 1: Enterprise CI Pipeline
+# Troubleshooting — Project 2: CD to AWS EKS
 
-## `waitForQualityGate` times out after 10 minutes
+## `terraform apply` fails with `UnauthorizedOperation` or `AccessDenied`
 
-The SonarQube → Jenkins webhook isn't configured (or is pointed at the
-wrong URL). Check SonarQube Administration → Webhooks — the URL must be
-`http://<jenkins-url>/sonarqube-webhook/` (trailing slash matters) and
-reachable from the SonarQube server's network, not just your browser's.
+Your AWS credentials don't have permission to create VPCs/IAM roles/EKS
+clusters. Confirm `aws sts get-caller-identity` returns the identity you
+expect, and that it has sufficient IAM permissions (see
+`docs/01-Prerequisites.md`).
 
-## `mvn sonar:sonar` fails with `Not authorized. Please check the properties sonar.login...`
+## `aws eks update-kubeconfig` succeeds, but `kubectl get nodes` returns `Unauthorized`
 
-Your SonarQube server credential in Jenkins (Manage Jenkins → System →
-SonarQube servers) is missing, expired, or wrong. Regenerate a token in
-SonarQube (My Account → Security) and update the Jenkins credential.
+The IAM identity you're using isn't mapped to Kubernetes RBAC. By default,
+only the IAM identity that *created* the cluster (i.e., whoever ran
+`terraform apply`) gets implicit `system:masters` access. If Jenkins uses a
+different IAM user than the one you ran Terraform with locally, you must
+add it to the `aws-auth` ConfigMap:
 
-## `docker: command not found` on the Docker Build stage
+```bash
+kubectl edit configmap aws-auth -n kube-system
+# add a new mapUsers or mapRoles entry for the Jenkins IAM identity
+```
 
-The Jenkins agent doesn't have the Docker CLI installed, or (if Jenkins
-itself runs in a container) the host's `docker.sock` isn't mounted. See
-step 5 of [`jenkins/README.md`](../jenkins/README.md).
+## Pods stuck in `Pending`
 
-## `docker push` fails with `unauthorized: authentication required`
+```bash
+kubectl describe pod <pod-name> -n enterprise-devops
+```
 
-- Confirm the `dockerhub-credentials` credential ID matches exactly what's
-  in the Jenkinsfile
-- Confirm you used a Docker Hub **access token**, not your account password
-  (Docker Hub deprecated password-based CI logins)
-- Confirm `IMAGE_NAME` in the Jenkinsfile actually starts with your Docker
-  Hub namespace — pushing to a namespace you don't own always 401s
+Usually one of: no node has enough allocatable CPU/memory for the
+`resources.requests` (check `kubectl top nodes` / `kubectl describe node`),
+or the `mysql-pvc` PersistentVolumeClaim never bound (check `kubectl get
+pvc -n enterprise-devops` — the default `gp2` StorageClass must exist,
+which EKS provides automatically unless it was explicitly removed).
 
-## Quality Gate fails but you can't tell why
+## HPA shows `<unknown>` for CURRENT / TARGETS forever
 
-Open the SonarQube project dashboard (linked from the Jenkins build's
-SonarQube widget, if the plugin is installed) — the specific failed
-condition (e.g. "Coverage on New Code < 80%") is listed there, not in the
-Jenkins console output.
+Metrics Server isn't installed. Re-run step 3 of
+`docs/03-Installation.md`, then `kubectl top pods -n enterprise-devops` —
+if that also fails, Metrics Server itself isn't healthy
+(`kubectl get pods -n kube-system | grep metrics-server`).
 
-## Build stuck at "Unit Test" forever
+## Ingress load balancer never gets an address
 
-Check for a hung Spring context in a test — most likely a `@SpringBootTest`
-someone added that's trying to reach a real database. This project's tests
-are deliberately Mockito-only / `@WebMvcTest` slices specifically to avoid
-this class of problem; keep new tests in that style.
+`kubectl get ingress -n enterprise-devops` shows no `ADDRESS`. Confirm the
+NGINX Ingress Controller is actually installed and its Service is `type:
+LoadBalancer` (`kubectl get svc -n ingress-nginx`) — the Ingress resource
+itself does nothing without a controller watching it.
+
+## `terraform destroy` hangs or fails deleting the VPC
+
+Almost always an orphaned ELB/NLB created by a Kubernetes `Service` or
+`Ingress` that Terraform doesn't know about, holding a network interface in
+one of the subnets. Delete the Ingress and any `LoadBalancer`-type Services
+first (see `scripts/terraform-destroy.sh`, which checks for this
+automatically), then retry `terraform destroy`.
+
+## `kubectl set image` succeeds but pods never update
+
+Check `kubectl rollout status deployment/backend -n enterprise-devops` —
+if it's stuck, the new pod likely never passes its readiness probe. Check
+`kubectl logs deployment/backend -n enterprise-devops` for a startup
+crash (frequently: `DB_URL`/credentials mismatch between the `backend-secret`
+and what `mysql-secret` actually contains).
 
 ## Next
 

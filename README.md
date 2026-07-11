@@ -1,57 +1,63 @@
-# Project 1 — Enterprise CI Pipeline
+# Project 2 — CD to AWS EKS
 
-Part of the [Enterprise DevOps Learning Platform](../../tree/main). This
-branch takes the base application from `main` and puts a production-style
-Jenkins CI pipeline in front of it. **No application code changed** — every
-file under `backend/` and `frontend/` is identical to `main`; everything
-here is new automation.
+Part of the [Enterprise DevOps Learning Platform](https://github.com/srikanth78933/Enterprise-DevOps-Learning-Platform).
+This branch continues from `project-01-ci-pipeline` and deploys the application
+onto a real, Terraform-provisioned AWS EKS cluster. **No application code
+changed** — everything here is new infrastructure and deployment automation.
 
 ```
-Git → Jenkins → Checkout → Maven Build → Unit Test → SonarQube → Quality Gate
-    → Parallel Stage → Package Jar → Docker Build → Push Docker Image
+Git → Jenkins → Build → Test → Sonar → Docker → Push Image → Deploy to EKS → Verify
 ```
 
 ## What you'll learn
 
-Git, Maven, Jenkins declarative pipelines, Docker, SonarQube quality gates,
-JUnit reporting, and publishing to Docker Hub.
+AWS (VPC, IAM, EKS), Terraform modules, `kubectl`, Namespaces, ConfigMaps,
+Secrets, Deployments, Services, Ingress, HorizontalPodAutoscaler, and
+VerticalPodAutoscaler.
 
 ## What's new in this branch
 
 ```
-├── Jenkinsfile                     Root pipeline definition
-├── jenkins/
-│   ├── README.md                   Jenkins controller setup (plugins, credentials, SonarQube)
-│   ├── plugins.txt                 Required plugin list
-│   └── settings.xml.example        Maven settings template (no real secrets)
-├── docker/
-│   └── backend-ci.Dockerfile       Packages the Jenkins-built jar (see architecture/README.md for why)
+├── terraform/                       VPC + IAM + EKS, as reusable modules
+│   ├── modules/{vpc,iam,eks}/
+│   └── (root: main.tf, variables.tf, outputs.tf, backend.tf, ...)
+├── kubernetes/                      Namespace, Config, Secrets template, Deployments, HPA, VPA, Ingress
+├── docker/frontend-ci.Dockerfile    Packages the Jenkins-built frontend bundle
+├── Jenkinsfile                      Extended: Frontend Build, dual Docker Build/Push, Deploy to EKS, Verify
 ├── architecture/
-│   ├── README.md                   What changed vs. main, and why
-│   └── pipeline-diagram.md         Mermaid flow + sequence diagrams
+│   ├── aws-infrastructure.md        VPC/EKS topology diagram
+│   └── pipeline-diagram.md          Updated end-to-end pipeline diagram
 ├── scripts/
-│   ├── docker-build-push.sh        Run the package/build/push stages locally, no Jenkins needed
-│   └── run-sonar-local.sh          Spin up a local SonarQube and analyze against it
-└── docs/                           01-Prerequisites through 09-Interview-Questions, scoped to this project
+│   ├── terraform-init-apply.sh      Provision the cluster without Jenkins
+│   ├── configure-kubeconfig.sh      Point local kubectl at the cluster
+│   ├── deploy-to-eks.sh             Local equivalent of the Deploy stage
+│   ├── verify-deployment.sh         Local equivalent of the Verify stage
+│   └── terraform-destroy.sh         Safe teardown (checks for orphaned load balancers first)
+└── docs/                            01-Prerequisites through 09-Interview-Questions, scoped to this project
 ```
 
 ## Quick start
 
-1. Read [`jenkins/README.md`](jenkins/README.md) and complete the one-time
-   Jenkins controller setup (plugins, tool names, SonarQube server,
-   Docker Hub credentials).
-2. Point a new Jenkins Pipeline job at this branch, script path `Jenkinsfile`.
-3. Trigger a build and watch it move through each stage in the classic
-   stage view or Blue Ocean.
+1. `terraform/README.md` → provision the cluster
+2. `jenkins/README.md` → extend your Project 1 Jenkins setup with AWS
+   credentials and `kubectl`/`aws` CLI on the agent
+3. Point the Jenkins pipeline job at this branch and run it
 
-Full walkthrough: [`docs/03-Installation.md`](docs/03-Installation.md) and
-[`docs/04-Step-by-Step.md`](docs/04-Step-by-Step.md).
+Full walkthrough: [`docs/03-Installation.md`](docs/03-Installation.md).
+
+## Cost warning
+
+This provisions real, billable AWS resources (EKS control plane, EC2 worker
+nodes, NAT Gateway, and — once you install an Ingress controller — a Load
+Balancer). Run `./scripts/terraform-destroy.sh` as soon as you're done —
+see [`docs/07-Cleanup.md`](docs/07-Cleanup.md) for the safe teardown order.
 
 ## Next branch
 
-`project-02-cd-eks` takes the image this pipeline pushes to Docker Hub and
-deploys it to a Terraform-provisioned AWS EKS cluster.
+`project-03-cicd-helm-microservices` replaces these raw manifests with a
+Helm umbrella chart and splits this Jenkinsfile into independent
+frontend/backend pipelines.
 
 ```bash
-git checkout project-02-cd-eks
+git checkout project-03-cicd-helm-microservices
 ```

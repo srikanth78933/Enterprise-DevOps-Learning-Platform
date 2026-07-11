@@ -1,56 +1,78 @@
-# CI Pipeline Diagram — Project 1
+# CI/CD Pipeline Diagram — Project 2
+
+Extends Project 1's pipeline (Checkout through Package Jar are unchanged)
+with a frontend build, a second Docker image, and a real deployment to EKS.
 
 ```mermaid
 flowchart TD
-    A[Git push] --> B[Jenkins: Checkout]
-    B --> C[Maven Build<br/>mvn clean compile]
-    C --> D[Unit Test<br/>mvn test + JUnit report]
-    D --> E[SonarQube Analysis<br/>mvn sonar:sonar]
+    A[Git push] --> B[Checkout]
+    B --> C[Maven Build]
+    C --> D[Unit Test]
+    D --> E[SonarQube Analysis]
     E --> F{Quality Gate}
     F -- fail --> X[Pipeline aborted]
     F -- pass --> G[Parallel Stage]
 
     subgraph G[Parallel Stage]
         direction LR
-        G1[Publish Coverage Report<br/>Jacoco]
+        G1[Publish Coverage Report]
         G2[Dependency Tree Audit]
     end
 
-    G --> H[Package Jar<br/>mvn package -DskipTests]
-    H --> I[Docker Build<br/>backend-ci.Dockerfile]
-    I --> J[Push Docker Image<br/>Docker Hub]
-    J --> K[Pipeline success]
+    G --> H[Package Jar]
+    H --> I[Frontend Build<br/>npm ci / test / build]
+    I --> J[Docker Build]
+
+    subgraph J[Docker Build]
+        direction LR
+        J1[Backend Image]
+        J2[Frontend Image]
+    end
+
+    J --> K[Push Docker Images<br/>backend + frontend, x2 tags each]
+    K --> L[Deploy to EKS]
+    L --> M[Verify]
+    M --> N[Pipeline success]
+
+    subgraph L[Deploy to EKS]
+        direction TB
+        L1[aws eks update-kubeconfig]
+        L2[kubectl apply -k kubernetes/]
+        L3[kubectl set image backend + frontend]
+        L1 --> L2 --> L3
+    end
+
+    subgraph M[Verify]
+        direction TB
+        M1[kubectl rollout status backend]
+        M2[kubectl rollout status frontend]
+        M3[scripts/verify-deployment.sh<br/>curl through the Ingress]
+        M1 --> M2 --> M3
+    end
 ```
 
-## Stage-by-stage detail
+## Deploy stage detail
 
 ```mermaid
 sequenceDiagram
-    participant Dev as Developer
-    participant GH as Git Repository
     participant J as Jenkins
-    participant SQ as SonarQube
+    participant AWS as AWS STS/EKS
+    participant K8s as EKS API Server
     participant DH as Docker Hub
 
-    Dev->>GH: git push
-    GH-->>J: webhook / poll triggers build
-    J->>J: Checkout
-    J->>J: mvn clean compile
-    J->>J: mvn test (JUnit + Mockito)
-    J->>SQ: mvn sonar:sonar (submit analysis)
-    SQ-->>J: webhook callback with Quality Gate result
-    alt Quality Gate failed
-        J-->>Dev: Build marked FAILURE, pipeline aborted
-    else Quality Gate passed
-        par Parallel Stage
-            J->>J: Publish Jacoco coverage report
-        and
-            J->>J: mvn dependency:tree audit
-        end
-        J->>J: mvn package -DskipTests (jar archived)
-        J->>J: docker build -f backend-ci.Dockerfile
-        J->>DH: docker push (build number + latest tags)
-        DH-->>J: push acknowledged
-        J-->>Dev: Build marked SUCCESS
-    end
+    J->>AWS: aws eks update-kubeconfig
+    AWS-->>J: kubeconfig with cluster endpoint + CA cert
+    J->>K8s: kubectl apply -k kubernetes/ (baseline: namespace, configmap, PVC, services, HPA, ingress)
+    K8s-->>J: resources created/unchanged
+    J->>K8s: kubectl set image deployment/backend backend=<image>:<build-tag>
+    J->>K8s: kubectl set image deployment/frontend frontend=<image>:<build-tag>
+    K8s->>DH: pull new image (rolling update, one pod at a time)
+    K8s-->>J: rollout status: successfully rolled out
+    J->>J: scripts/verify-deployment.sh (curl /actuator/health through Ingress)
 ```
+
+Why `kubectl apply -k` runs *before* `kubectl set image`: the baseline
+apply is what actually creates the namespace/configmap/services/HPA/PVC
+if they don't already exist (first deploy) or reconciles drift (later
+deploys); `set image` only ever touches the container image field on an
+existing Deployment, so it must run second.

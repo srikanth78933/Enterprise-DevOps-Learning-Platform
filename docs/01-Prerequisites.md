@@ -1,35 +1,33 @@
-# Prerequisites — Project 1: Enterprise CI Pipeline
+# Prerequisites — Project 2: CD to AWS EKS
 
-This project assumes you've already completed the [`main`](../../tree/main)
-branch prerequisites (JDK 21, Maven, Node, Docker). Additionally:
+Builds on Project 1's prerequisites (Jenkins, SonarQube, Docker Hub — see
+`docs/01-Prerequisites.md` on the `project-01-ci-pipeline` branch).
+Additionally:
 
 | Tool | Minimum Version | Check |
 |---|---|---|
-| Jenkins | 2.440+ (LTS) | Web UI → Manage Jenkins → System Information |
-| SonarQube | 10.x Community Edition | Web UI footer |
-| Docker Hub account | — | https://hub.docker.com |
-| Git | 2.40+ | `git --version` |
+| AWS CLI | v2 | `aws --version` |
+| kubectl | 1.28+ | `kubectl version --client` |
+| Terraform | 1.7+ | `terraform -version` |
+| An AWS account with billing enabled | — | — |
 
 ## Accounts and access you need before starting
 
-1. **Docker Hub account** with an access token (not your password) —
-   Account Settings → Security → New Access Token.
-2. **SonarQube instance** — either the local one spun up by
-   `scripts/run-sonar-local.sh`, or a shared team instance with a
-   personal access token you can generate.
-3. **A Jenkins controller** you have admin access to (local Docker
-   container is fine for learning — see [`jenkins/README.md`](../jenkins/README.md)).
+1. **AWS account** with permissions to create VPCs, IAM roles, and EKS
+   clusters (an `AdministratorAccess` policy is simplest for learning; a
+   real org would scope this down significantly).
+2. **AWS credentials configured locally**: `aws configure` (access key +
+   secret + default region), or an assumed role via `aws sso login` /
+   `aws sts assume-role`.
+3. Everything from Project 1: Docker Hub account, Jenkins, SonarQube.
 
-## Ports used locally
+## Cost awareness
 
-| Service | Port |
-|---|---|
-| Jenkins | 8080 |
-| SonarQube | 9000 |
-
-If you're also running the `main` branch's docker-compose stack, note it
-also uses 8080 for the backend API — don't run both at once on the same
-host without remapping one of them.
+Running through this project's `terraform apply` → `terraform destroy`
+cycle a few times while learning costs a few dollars (EKS control plane
+$0.10/hr, 2× t3.medium nodes, one NAT Gateway, briefly a Load Balancer).
+Not free-tier eligible. Set a AWS Budget alert before starting if you're
+cost-sensitive.
 
 ## Next
 
