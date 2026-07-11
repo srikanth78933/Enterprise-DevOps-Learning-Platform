@@ -1,5 +1,9 @@
 # CI Pipeline Diagram — Project 1
 
+Rendered view (source is the Mermaid below, in case you want to edit it):
+
+![Project 1 Pipeline — Detailed Sequential View](./project-1-pipeline-detailed.png)
+
 ```mermaid
 flowchart TD
     A[Git push] --> B[Jenkins: Checkout]
