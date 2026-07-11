@@ -1,0 +1,22 @@
+# Umbrella defaults - overrides subchart values by key, same pattern as
+# helm/enterprise-app/values.yaml and logging/elk-stack/values.yaml.
+
+prometheus:
+  watchNamespace: enterprise-devops
+  persistence:
+    enabled: true
+    size: 20Gi
+
+alertmanager:
+  slack:
+    enabled: false
+
+grafana:
+  prometheus:
+    host: "http://prometheus:9090"
+  ingress:
+    enabled: true
+    host: grafana.enterprise-devops.example.com
+    tls:
+      enabled: true
+      secretName: grafana-tls

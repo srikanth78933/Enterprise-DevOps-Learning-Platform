@@ -1,0 +1,41 @@
+# Separate Argo CD Application from both enterprise-app and logging-stack -
+# observability infrastructure has its own lifecycle and namespace, same
+# reasoning as logging-stack's own file.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-stack
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: enterprise-devops
+
+  source:
+    repoURL: "https://github.com/srikanth78933/Enterprise-DevOps-Learning-Platform.git"
+    targetRevision: project-06-monitoring-prometheus-grafana
+    path: monitoring/monitoring-stack
+    helm:
+      valueFiles:
+        - values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      # Same reasoning as logging-stack: Prometheus/Alertmanager/Grafana
+      # all hold their own persistent data (TSDB, alert state, dashboards/
+      # sessions) - no selfHeal, so a human looks before drift gets
+      # auto-reverted on a release with stateful volumes attached.
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

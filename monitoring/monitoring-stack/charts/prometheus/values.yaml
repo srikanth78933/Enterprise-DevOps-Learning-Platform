@@ -1,0 +1,31 @@
+image:
+  repository: prom/prometheus
+  tag: "v2.54.1"
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+persistence:
+  enabled: true
+  storageClassName: gp2
+  size: 20Gi
+
+retention: 15d
+
+service:
+  port: 9090
+
+alertmanager:
+  host: "alertmanager:9093"
+
+# Which namespace's pods Prometheus's annotation-based discovery scrapes.
+# Kept scoped (not cluster-wide) for the same reason Filebeat's
+# watchNamespace is scoped in Project 5 - a shared multi-tenant cluster
+# would run this per-team or widen it deliberately, not by accident.
+watchNamespace: enterprise-devops

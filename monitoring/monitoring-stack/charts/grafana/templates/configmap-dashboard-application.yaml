@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana.fullname" . }}-dashboard-application
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  application-jvm-dashboard.json: |
+    {
+      "title": "Application (Spring Boot / JVM) Dashboard",
+      "uid": "enterprise-devops-application-jvm",
+      "schemaVersion": 39,
+      "version": 1,
+      "timezone": "browser",
+      "time": { "from": "now-6h", "to": "now" },
+      "refresh": "30s",
+      "panels": [
+        {
+          "id": 1,
+          "title": "HTTP Request Rate (req/s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [{
+            "expr": "sum by (uri, status) (rate(http_server_requests_seconds_count{job=\"kubernetes-pods\", app=\"backend\"}[5m]))",
+            "legendFormat": "{{`{{uri}}`}} [{{`{{status}}`}}]"
+          }]
+        },
+        {
+          "id": 2,
+          "title": "HTTP p95 Latency (seconds)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [{
+            "expr": "histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{job=\"kubernetes-pods\", app=\"backend\"}[5m])))",
+            "legendFormat": "{{`{{uri}}`}}"
+          }]
+        },
+        {
+          "id": 3,
+          "title": "Availability (non-5xx rate / total rate)",
+          "type": "gauge",
+          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 8 },
+          "targets": [{
+            "expr": "sum(rate(http_server_requests_seconds_count{job=\"kubernetes-pods\", app=\"backend\", status!~\"5..\"}[5m])) / sum(rate(http_server_requests_seconds_count{job=\"kubernetes-pods\", app=\"backend\"}[5m]))"
+          }],
+          "fieldConfig": { "defaults": { "min": 0, "max": 1, "unit": "percentunit" } }
+        },
+        {
+          "id": 4,
+          "title": "JVM Heap Used (bytes)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 9, "x": 6, "y": 8 },
+          "targets": [{
+            "expr": "jvm_memory_used_bytes{job=\"kubernetes-pods\", app=\"backend\", area=\"heap\"}",
+            "legendFormat": "{{`{{id}}`}}"
+          }]
+        },
+        {
+          "id": 5,
+          "title": "JVM Live Threads",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 9, "x": 15, "y": 8 },
+          "targets": [{
+            "expr": "jvm_threads_live_threads{job=\"kubernetes-pods\", app=\"backend\"}",
+            "legendFormat": "{{`{{pod}}`}}"
+          }]
+        },
+        {
+          "id": 6,
+          "title": "JVM GC Pause Time (seconds, rate)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "targets": [{
+            "expr": "rate(jvm_gc_pause_seconds_sum{job=\"kubernetes-pods\", app=\"backend\"}[5m])",
+            "legendFormat": "{{`{{pod}}`}} - {{`{{action}}`}}"
+          }]
+        },
+        {
+          "id": 7,
+          "title": "Database Connection Pool - Active Connections",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "targets": [{
+            "expr": "hikaricp_connections_active{job=\"kubernetes-pods\", app=\"backend\"}",
+            "legendFormat": "{{`{{pod}}`}}"
+          }]
+        }
+      ]
+    }

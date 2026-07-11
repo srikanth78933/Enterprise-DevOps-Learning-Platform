@@ -1,0 +1,31 @@
+image:
+  repository: prom/alertmanager
+  tag: "v0.27.0"
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+persistence:
+  enabled: true
+  storageClassName: gp2
+  size: 2Gi
+
+service:
+  port: 9093
+
+# Disabled by default so the chart installs and alerts route somewhere
+# (a no-op "default" receiver, visible in the Alertmanager UI) without
+# requiring a real Slack workspace. Enable and point existingSecretName at
+# a Secret containing a `slack-webhook-url` key
+# (kubectl create secret generic alertmanager-slack --from-literal=slack-webhook-url=... )
+# to actually forward critical alerts - see docs/08-Assignments.md.
+slack:
+  enabled: false
+  existingSecretName: alertmanager-slack
+  channel: "#enterprise-devops-alerts"

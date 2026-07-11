@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "prometheus.fullname" . }}-config
+  labels:
+    {{- include "prometheus.labels" . | nindent 4 }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ["{{ .Values.alertmanager.host }}"]
+
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:{{ .Values.service.port }}"]
+
+      # Annotation-based pod discovery - covers node-exporter,
+      # kube-state-metrics, and the backend (see the
+      # prometheus.io/scrape annotations on each of their pod templates).
+      # No ServiceMonitor CRD, no Prometheus Operator - this is the
+      # original, still entirely valid, annotation-driven pattern that
+      # predates the Operator and remains simpler for a single-cluster
+      # learning setup.
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - {{ .Values.watchNamespace }}
+                - {{ .Release.Namespace }}
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            target_label: app
+
+      # Container-level CPU/memory (cAdvisor, via the kubelet's proxy on
+      # the API server) - what the HighCPUUsage/HighMemoryUsage alerts in
+      # rules.yml actually query. This is the standard reference config
+      # for scraping cAdvisor without the Prometheus Operator.
+      - job_name: kubernetes-nodes-cadvisor
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+      # Node-level OS/hardware metrics powering the Node/Cluster
+      # dashboards and the NodeDiskFull/NodeDown alerts.
+      # node-exporter's Service port is fixed at 9100 (see
+      # charts/node-exporter/values.yaml) - hardcoded here rather than
+      # referenced from that subchart's values, since sibling subcharts
+      # don't share a values context in Helm.
+      - job_name: node-exporter
+        static_configs:
+          - targets: ["node-exporter:9100"]
+
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets: ["kube-state-metrics:8080"]
+
+      - job_name: alertmanager
+        static_configs:
+          - targets: ["{{ .Values.alertmanager.host }}"]

@@ -1,51 +1,53 @@
-# Student Assignments — Project 5: Centralized Logging (ELK)
+# Student Assignments — Project 6: Monitoring (Prometheus & Grafana)
 
 ## Beginner
 
-1. Add a sixth log category: **audit logs** for every Employee/Department/
-   Project create/update/delete (who, what, when — "who" can be a
-   placeholder like `"system"` until auth exists in a later project). Tag
-   it distinctly in the Logstash pipeline (`audit_log`) and confirm it
-   shows up separately from `request_log` in Kibana.
-2. Finish the dashboard started in `docs/04-Step-by-Step.md` step 5: add a
-   third visualization showing the top 10 slowest endpoints by average
-   `app.durationMs`, grouped by `app.uri`.
+1. Enable Slack alerting: create a Slack incoming webhook, store it in the
+   `alertmanager-slack` secret, set `alertmanager.slack.enabled: true`,
+   and trigger a real alert (Step 3 or 5 of `docs/04-Step-by-Step.md`) to
+   confirm a message actually arrives.
+2. Add a fourth dashboard panel type to the Application dashboard: a
+   `table` panel listing the top 5 slowest endpoints by p99 (not p95)
+   latency over the last hour.
 
 ## Intermediate
 
-3. Add an Elasticsearch Index Lifecycle Management (ILM) policy that rolls
-   indices over after 7 days or 5GB and deletes anything older than 30
-   days — right now, `enterprise-devops-logs-*` grows forever. Apply it via
-   a Kibana Dev Tools call or a Logstash pipeline addition, and document
-   how you verified it actually rolls over (you don't have to wait 7 real
-   days — simulate with a shorter policy first).
-4. Add resource-based alerting: a Kibana alert (or a simple script polling
-   the ES query API) that fires when `error_log`-tagged documents exceed
-   some rate in a rolling window. This is a preview of what Project 6's
-   Alertmanager formalizes for metrics — implement the logs-based
-   equivalent here first.
-5. Extend Filebeat's `watchNamespace` filter (currently just
-   `enterprise-devops`) to also ship `argocd` namespace logs, so Argo CD's
-   own sync failures show up in the same Kibana instance. Consider (and
-   document) whether that's actually a good idea, or whether platform logs
-   deserve their own separate index/retention policy.
+3. Add a `RequestErrorRate` alert: fires when the ratio of 5xx responses
+   to total requests exceeds 5% over 5 minutes, using
+   `http_server_requests_seconds_count`. This is the "Availability" metric
+   category the project's learning goals name, not yet covered by the six
+   alerts already included.
+4. The `NodeDown` alert only fires if node-exporter itself becomes
+   unreachable. Add a genuinely different alert,
+   `KubernetesNodeNotReady`, based on `kube_node_status_condition{condition="Ready",
+   status="true"} == 0` from kube-state-metrics, and explain in your PR
+   the actual difference between these two failure modes (a node can be
+   `NotReady` in the Kubernetes API while its node-exporter is still
+   perfectly reachable, or vice versa).
+5. Add a Grafana alert-annotations overlay: configure Grafana to draw a
+   vertical marker on the Application dashboard's timeseries panels
+   whenever `HighCPUUsage` fires, so a latency spike and its cause are
+   visible on the same graph without cross-referencing Alertmanager
+   separately.
 
 ## Advanced
 
-6. Replace the self-signed Kibana TLS cert with a real one issued by
-   cert-manager (install cert-manager, create a self-signed or
-   Let's-Encrypt-staging `ClusterIssuer`, and point Kibana's Ingress at it
-   via annotations instead of a manually-created Secret). Document exactly
-   what changes in `logging/elk-stack/charts/kibana/templates/ingress.yaml`.
-7. Scale Elasticsearch from single-node to a real 3-node cluster: update
-   `discovery.type` away from `single-node` to proper
-   `discovery.seed_hosts` + `cluster.initial_master_nodes` pointed at the
-   StatefulSet's stable pod DNS names (`elasticsearch-0.elasticsearch-headless`,
-   etc. — see the comment in `charts/elasticsearch/templates/configmap.yaml`
-   for exactly what has to change), and verify a real cluster forms via
-   `_cluster/health`.
+6. Migrate this project's plain-YAML Prometheus setup to the Prometheus
+   Operator (`ServiceMonitor` + `PrometheusRule` CRDs). Install the
+   operator, convert `configmap.yaml`'s scrape jobs into `ServiceMonitor`
+   resources and `configmap-rules.yaml`'s alert groups into a
+   `PrometheusRule`, and document exactly what got simpler and what got
+   more opaque in the process — this project deliberately chose the
+   plain-YAML approach; form your own opinion on the tradeoff with direct
+   experience of both.
+7. Add long-term metrics storage: Prometheus's local TSDB (this project)
+   only retains `retention: 15d`. Research and implement (or at least
+   design and document) a remote-write setup to a long-term store (Thanos,
+   Cortex, or a managed option), and explain what query-time tradeoffs
+   that introduces versus querying local Prometheus directly.
 
 ## Submission
 
-Open a PR against `project-05-logging-elk`. Include a screenshot of your
-Kibana dashboard and the Elasticsearch `_cat/indices?v` output.
+Open a PR against `project-06-monitoring-prometheus-grafana`. Include a
+screenshot of a firing alert in the Alertmanager UI and one dashboard
+panel showing real (not idle) traffic data.

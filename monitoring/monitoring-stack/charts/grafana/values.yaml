@@ -1,0 +1,38 @@
+image:
+  repository: grafana/grafana
+  tag: "11.2.0"
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 250m
+    memory: 512Mi
+
+persistence:
+  enabled: true
+  storageClassName: gp2
+  size: 5Gi
+
+prometheus:
+  host: "http://prometheus:9090"
+
+service:
+  port: 3000
+
+# Real credentials never set here - create the secret imperatively (see
+# monitoring/monitoring-stack/README.md) and reference it by name, same
+# principle as backend-secret/mysql-secret since Project 2.
+existingSecret: grafana-admin
+existingSecretUserKey: GF_SECURITY_ADMIN_USER
+existingSecretPasswordKey: GF_SECURITY_ADMIN_PASSWORD
+
+ingress:
+  enabled: true
+  className: nginx
+  host: grafana.enterprise-devops.example.com
+  tls:
+    enabled: true
+    secretName: grafana-tls

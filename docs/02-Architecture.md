@@ -1,37 +1,30 @@
-# Architecture — Project 5: Centralized Logging (ELK)
+# Architecture — Project 6: Monitoring (Prometheus & Grafana)
 
 Full detail lives in [`/architecture`](../architecture/README.md) and
-[`/architecture/log-flow.md`](../architecture/log-flow.md) — this page is
-the short version.
+[`/architecture/metrics-flow.md`](../architecture/metrics-flow.md) — this
+page is the short version.
 
-## Two independent Argo CD Applications now
-
-```
-gitops/applications/enterprise-app.yaml   → helm/enterprise-app     → namespace: enterprise-devops
-gitops/applications/logging-stack.yaml    → logging/elk-stack       → namespace: logging
-```
-
-Neither knows the other exists. `logging-stack` watches container logs
-across `enterprise-devops` (via Filebeat's namespace filter in
-`logging/elk-stack/values.yaml`), but that's an application-layer
-concern (which logs Filebeat ships), not a Kubernetes/Argo CD dependency
-between the two Applications.
-
-## Backend logging layers (new)
+## Three independent Argo CD Applications now
 
 ```
-logback-spring.xml          → JSON (prod) vs plain text (dev) console output
-filter/RequestLoggingFilter → wraps every HTTP request: method/uri/status/durationMs, WARN if slow
-exception/GlobalExceptionHandler → WARN for expected client errors, ERROR+stacktrace for real failures
+gitops/applications/enterprise-app.yaml    → helm/enterprise-app          → namespace: enterprise-devops
+gitops/applications/logging-stack.yaml     → logging/elk-stack            → namespace: logging
+gitops/applications/monitoring-stack.yaml  → monitoring/monitoring-stack  → namespace: monitoring
 ```
 
-## ELK chart layers
+None depend on each other at the Kubernetes/Argo CD level.
+`monitoring-stack` observes `enterprise-devops` (via scrape config scoped
+to that namespace) purely as an application-layer concern, the same way
+`logging-stack`'s Filebeat does.
+
+## Monitoring chart layers
 
 ```
-logging/elk-stack/charts/elasticsearch/  → StatefulSet + PVC (log store)
-logging/elk-stack/charts/logstash/       → Deployment (parse + tag + index)
-logging/elk-stack/charts/filebeat/       → DaemonSet + RBAC (log shipper)
-logging/elk-stack/charts/kibana/         → Deployment + Ingress/TLS (UI)
+monitoring/monitoring-stack/charts/node-exporter/       → DaemonSet: host CPU/memory/disk/network
+monitoring/monitoring-stack/charts/kube-state-metrics/  → Deployment+RBAC: K8s object state (pod status, restarts, replica counts)
+monitoring/monitoring-stack/charts/prometheus/          → Deployment+PVC: scrapes both of the above + backend, evaluates alert rules
+monitoring/monitoring-stack/charts/alertmanager/        → Deployment+PVC: routes/dedupes fired alerts
+monitoring/monitoring-stack/charts/grafana/             → Deployment+PVC+Ingress: 3 dashboards, queries Prometheus
 ```
 
 ## Next

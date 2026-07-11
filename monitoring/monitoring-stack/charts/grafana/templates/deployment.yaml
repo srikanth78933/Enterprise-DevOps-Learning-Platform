@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "grafana.fullname" . }}
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "grafana.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grafana.selectorLabels" . | nindent 8 }}
+    spec:
+      # Grafana's container writes to /var/lib/grafana as UID 472 by
+      # default - without this, a fresh PVC mounted as root-owned causes
+      # Grafana to fail on first boot with a permissions error.
+      securityContext:
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboard-cluster
+              mountPath: /var/lib/grafana/dashboards/cluster-node-dashboard.json
+              subPath: cluster-node-dashboard.json
+            - name: dashboard-namespace
+              mountPath: /var/lib/grafana/dashboards/namespace-pod-dashboard.json
+              subPath: namespace-pod-dashboard.json
+            - name: dashboard-application
+              mountPath: /var/lib/grafana/dashboards/application-jvm-dashboard.json
+              subPath: application-jvm-dashboard.json
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+      volumes:
+        - name: datasources
+          configMap:
+            name: {{ include "grafana.fullname" . }}-datasources
+        - name: dashboard-provider
+          configMap:
+            name: {{ include "grafana.fullname" . }}-dashboard-provider
+        - name: dashboard-cluster
+          configMap:
+            name: {{ include "grafana.fullname" . }}-dashboard-cluster
+        - name: dashboard-namespace
+          configMap:
+            name: {{ include "grafana.fullname" . }}-dashboard-namespace
+        - name: dashboard-application
+          configMap:
+            name: {{ include "grafana.fullname" . }}-dashboard-application
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "grafana.fullname" . }}-pvc
+        {{- else }}
+        - name: data
+          emptyDir: {}
+        {{- end }}

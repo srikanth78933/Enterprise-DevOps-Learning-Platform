@@ -23,13 +23,16 @@ spec:
     # Project 5: the elk-stack Application deploys here.
     - namespace: logging
       server: https://kubernetes.default.svc
+    # Project 6: the monitoring-stack Application deploys here.
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
 
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
-    # Project 5: Filebeat's DaemonSet needs cluster-scoped read access to
-    # pods/namespaces/nodes for Kubernetes autodiscover - see
-    # logging/elk-stack/charts/filebeat/templates/rbac.yaml.
+    # Project 5 (Filebeat) and Project 6 (Prometheus, kube-state-metrics)
+    # DaemonSets/Deployments all need cluster-scoped read access for
+    # Kubernetes service/pod/node discovery - see each chart's rbac.yaml.
     - group: "rbac.authorization.k8s.io"
       kind: ClusterRole
     - group: "rbac.authorization.k8s.io"

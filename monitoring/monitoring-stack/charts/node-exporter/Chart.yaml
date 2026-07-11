@@ -1,0 +1,6 @@
+apiVersion: v2
+name: node-exporter
+description: Node-level hardware/OS metrics (CPU, memory, disk, network) for the Enterprise DevOps Learning Platform
+type: application
+version: 1.0.0
+appVersion: "1.8.2"

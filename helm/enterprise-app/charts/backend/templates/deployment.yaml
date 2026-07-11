@@ -15,6 +15,14 @@ spec:
     metadata:
       labels:
         {{- include "backend.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Project 6: lets Prometheus's pod-based service discovery find
+        # this pod automatically (see monitoring/monitoring-stack/charts/
+        # prometheus/templates/configmap.yaml) without a ServiceMonitor
+        # CRD or hardcoding this pod's IP anywhere in Prometheus config.
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: {{ .Values.service.port | quote }}
     spec:
       containers:
         - name: backend

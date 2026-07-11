@@ -1,51 +1,54 @@
-# Interview Questions — Project 5: Centralized Logging (ELK)
+# Interview Questions — Project 6: Monitoring (Prometheus & Grafana)
 
-## ELK fundamentals
+## Prometheus fundamentals
 
-1. What's the specific job of each of the four components (Elasticsearch,
-   Logstash, Filebeat, Kibana)? Which one(s) could you remove and still
-   have a (lesser) working pipeline, and what would you lose?
-2. Why ship logs via a sidecar/DaemonSet log shipper (Filebeat) reading
-   files, rather than having the application push logs directly to
-   Logstash or Elasticsearch over the network?
-3. What does Logstash's `json` filter actually do to a raw log line, and
-   why does this project apply it conditionally (only when a Kubernetes
-   label matches), not to every incoming event?
+1. What's the difference between Prometheus's pull model (scraping
+   targets) and a push-based metrics system? What operational problem
+   does pull solve that becomes relevant specifically in a Kubernetes
+   environment with pods constantly being created/destroyed?
+2. Explain what `rate()` does to a counter metric and why you almost never
+   query a raw counter (like `container_cpu_usage_seconds_total`)
+   directly without it.
+3. Walk through the `for:` clause on an alert rule — what problem does it
+   solve, and what would `HighCPUUsage` look like in practice (how often
+   would it fire) if `for:` were removed entirely?
 
-## Kubernetes specifics
+## This project's scrape configuration
 
-4. Why does Elasticsearch use a StatefulSet with `volumeClaimTemplates`
-   while this repo's MySQL (Projects 2-4) uses a plain Deployment with a
-   single shared PVC? What would break if you swapped them?
-5. Why does Filebeat need a ClusterRole (cluster-scoped), not just a
-   namespaced Role, even though it only ships logs from one namespace by
-   configuration (`watchNamespace`)?
-6. Explain what `tolerations: - operator: Exists` on the Filebeat
-   DaemonSet does, and why a log shipper specifically needs it when most
-   of this repo's other workloads don't.
+4. Explain each `relabel_configs` step in the `kubernetes-pods` job
+   (`monitoring/monitoring-stack/charts/prometheus/templates/configmap.yaml`)
+   — what does each one actually do to the discovered target before
+   Prometheus scrapes it?
+5. Why does the `kubernetes-nodes-cadvisor` job need `bearer_token_file`
+   and a ClusterRole with `nonResourceURLs`, while the `node-exporter` and
+   `kube-state-metrics` jobs need neither?
+6. What's the practical difference between annotation-based service
+   discovery (this project) and a `ServiceMonitor` CRD (Prometheus
+   Operator)? What does the Operator actually automate that you're doing
+   by hand here?
 
-## This project's design choices
+## Alerting
 
-7. Why is `logging-stack` a separate Argo CD Application instead of a
-   fourth subchart inside `enterprise-app`?
-8. Why does `logging-stack`'s Application omit `selfHeal: true` while
-   `enterprise-app`'s Application has it?
-9. Why does `logback-spring.xml` only emit JSON in non-dev profiles
-   instead of always emitting JSON (which would also work with the ELK
-   pipeline, just be harder to read locally)?
-10. Walk through why `RequestLoggingFilter` uses MDC for `requestId`
-    instead of passing it explicitly through method calls. What would you
-    lose by choosing thread-local MDC over explicit parameter-passing in a
-    reactive (non-blocking) application, if this were ever migrated to
-    WebFlux?
+7. Why does `PodCrashLooping` use `increase(...)[15m]) > 3` (a count over
+   a window) rather than a simple threshold on the restart count itself?
+8. Explain what the `inhibit_rules` in Alertmanager's config do, using the
+   specific example in this project (`PodCrashLooping` suppressing
+   `HighCPUUsage`/`HighMemoryUsage` for the same pod). What's the failure
+   mode if inhibition weren't configured?
+9. Why is the default Alertmanager receiver a no-op (`default`, UI-only)
+   rather than, say, always emailing someone? What's the actual cost of
+   over-alerting that this default avoids?
 
-## Log design
+## Grafana & metrics design
 
-11. Why does `GlobalExceptionHandler` log `ResourceNotFoundException` at
-    WARN without a stack trace, but generic `Exception` at ERROR with one?
-    What operational problem does logging every 404 at ERROR create at
-    scale?
-12. What's the tradeoff of tagging log events at ingestion time (Logstash,
-    this project's approach) versus tagging them at query time (a saved
-    Kibana search with the same filter criteria, applied only when
-    someone looks)?
+10. Every panel in this project's dashboards queries Prometheus live at
+    render/refresh time. What are the tradeoffs of that versus a system
+    where Grafana caches or pre-aggregates data?
+11. Why does the Application dashboard use `histogram_quantile()` for p95
+    latency instead of just averaging `http_server_requests_seconds_sum /
+    http_server_requests_seconds_count`? What does averaging hide that
+    percentiles reveal?
+12. This project exposes JVM metrics (heap, threads, GC pause time)
+    alongside HTTP metrics on the same dashboard. Why might a JVM-specific
+    metric (like GC pause time) be a leading indicator for an HTTP-level
+    symptom (like latency) that hasn't shown up yet?

@@ -1,0 +1,15 @@
+image:
+  repository: registry.k8s.io/kube-state-metrics/kube-state-metrics
+  tag: "v2.13.0"
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+service:
+  port: 8080

@@ -1,67 +1,73 @@
-# Step-by-Step Walkthrough — Project 5: Centralized Logging (ELK)
+# Step-by-Step Walkthrough — Project 6: Monitoring (Prometheus & Grafana)
 
-## 1. Confirm raw logs look right before trusting the pipeline
+## 1. Explore each dashboard once with no load
+
+Open Grafana, visit all three dashboards with the cluster idle. Get a
+feel for baseline numbers (idle CPU%, request rate near zero, JVM heap at
+rest) before you generate load — you need a "normal" to compare "abnormal"
+against.
+
+## 2. Generate load and watch the Application dashboard react live
 
 ```bash
-./scripts/tail-logs.sh
+./scripts/generate-load.sh 300 20
 ```
 
-You should see one JSON object per line, each with `level`, `logger_name`,
-`message`, and (during an active request) `requestId`. If this looks like
-plain text instead of JSON, `SPRING_PROFILES_ACTIVE` isn't set to
-anything other than `dev` for this pod — check
-`helm/enterprise-app/charts/backend/values.yaml`'s
-`config.springProfilesActive`.
+While it runs, watch the Application dashboard's HTTP Request Rate and
+p95 Latency panels update in near-real-time (Grafana's default refresh
+matches Prometheus's 30s scrape interval).
 
-## 2. Find the five log categories in Kibana
+## 3. Try to trip HighCPUUsage on purpose
 
-After running `scripts/generate-test-traffic.sh`, in Kibana's Discover
-tab:
-
-- **Application logs**: search `app.logger_name: *` (everything has this)
-- **Request logs**: search `tags: request_log`
-- **Error logs**: search `app.level: ERROR` or `tags: error_log`
-- **Exception logs**: same as error logs — open one and expand
-  `app.stack_trace` to see the full trace
-- **Slow requests**: search `tags: slow_request` (see step 3 to actually
-  produce one)
-
-## 3. Produce a slow-request log entry on purpose
-
-The default threshold (`SLOW_REQUEST_THRESHOLD_MS=1000`) is unlikely to
-trigger under normal local traffic. Lower it temporarily:
+The default backend CPU limit (500m) may or may not saturate under
+`generate-load.sh`'s traffic — simple CRUD endpoints aren't very CPU-heavy.
+For a reliable demo, temporarily lower the limit (same pattern Project 5
+used for the slow-request threshold):
 
 ```bash
 helm upgrade enterprise-app helm/enterprise-app -n enterprise-devops \
-  --reuse-values --set backend.config.slowRequestThresholdMs=1
+  --reuse-values --set backend.resources.limits.cpu=50m
+
+./scripts/generate-load.sh 300 20
 ```
 
-(This is a direct Helm upgrade for a quick demo, bypassing GitOps — revert
-it via a Git-tracked change afterward, not another direct `helm upgrade`,
-to avoid leaving your `enterprise-app` release drifted from what Argo CD's
-`selfHeal` expects to find.)
+Watch it fire in Prometheus (http://localhost:9090/alerts) — `Pending`
+for the first 5 minutes (the `for: 5m` clause), then `Firing`. Check
+Alertmanager too — it should show the same alert, grouped.
 
-Then re-run `./scripts/generate-test-traffic.sh` — every request now
-exceeds 1ms and logs as `slow_request`.
+**Revert this change via Git afterward**, not another direct `helm
+upgrade` — see Project 4's GitOps flow for why leaving it as
+uncommitted drift matters once `enterprise-app`'s `selfHeal: true` is
+active.
 
-## 4. Trace one request end-to-end via `requestId`
+## 4. Trigger PodCrashLooping on purpose
 
 ```bash
-curl -sD - -H "Host: enterprise-devops.example.com" "http://<lb-hostname>/api/employees/999999" -o /dev/null | grep -i x-request-id
+kubectl exec -n enterprise-devops deploy/backend -- sh -c "kill 1"
 ```
 
-Copy the `X-Request-Id` value, then in Kibana search
-`app.requestId: "<that-value>"` — you should see both the `request_log`
-line (WARN or INFO, status 404) and the corresponding warn-level
-`resource_not_found` application log from `GlobalExceptionHandler`, tied
-together by that one field.
+Do this 4 times in a row within 15 minutes (or just wait for it to
+restart and crash repeatedly if step 3's CPU limit is still in effect —
+OOMKilled counts as a restart too). Watch `PodCrashLooping` fire.
 
-## 5. Build a simple Kibana dashboard
+## 5. Trigger KubernetesImagePullBackOff on purpose
 
-Create a visualization counting log volume by `tags` over time, and a
-second one counting by `app.level`. Save both to a dashboard named
-"Enterprise DevOps — Log Overview." This is what `docs/08-Assignments.md`
-builds on.
+```bash
+helm upgrade enterprise-app helm/enterprise-app -n enterprise-devops \
+  --reuse-values --set backend.image.tag=this-tag-does-not-exist
+```
+
+Watch the alert fire within 2 minutes, then revert (again, via Git, not
+another direct `helm upgrade`).
+
+## 6. Check the Alertmanager UI's grouping and inhibition
+
+If you triggered both `PodCrashLooping` and `HighCPUUsage`/`HighMemoryUsage`
+for the same pod around the same time, confirm the resource alerts got
+inhibited (see the `inhibit_rules` in
+`monitoring/monitoring-stack/charts/alertmanager/templates/configmap.yaml`)
+— Alertmanager's UI shows inhibited alerts distinctly from actively
+firing ones.
 
 ## Next
 

@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "prometheus.fullname" . }}-rules
+  labels:
+    {{- include "prometheus.labels" . | nindent 4 }}
+data:
+  rules.yml: |
+    groups:
+      - name: enterprise-devops-alerts
+        rules:
+          - alert: HighCPUUsage
+            expr: |
+              (sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace="{{ .Values.watchNamespace }}", container!="", container!="POD"}[5m])))
+              /
+              (sum by (namespace, pod) (kube_pod_container_resource_limits{namespace="{{ .Values.watchNamespace }}", resource="cpu"}))
+              > 0.8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{`{{ $labels.pod }}`}} CPU usage above 80%"
+              description: "Pod {{`{{ $labels.pod }}`}} in namespace {{`{{ $labels.namespace }}`}} has used over 80% of its CPU limit for 5 minutes."
+
+          - alert: HighMemoryUsage
+            expr: |
+              (sum by (namespace, pod) (container_memory_working_set_bytes{namespace="{{ .Values.watchNamespace }}", container!="", container!="POD"}))
+              /
+              (sum by (namespace, pod) (kube_pod_container_resource_limits{namespace="{{ .Values.watchNamespace }}", resource="memory"}))
+              > 0.8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{`{{ $labels.pod }}`}} memory usage above 80%"
+              description: "Pod {{`{{ $labels.pod }}`}} in namespace {{`{{ $labels.namespace }}`}} has used over 80% of its memory limit for 5 minutes."
+
+          - alert: PodCrashLooping
+            expr: increase(kube_pod_container_status_restarts_total{namespace="{{ .Values.watchNamespace }}"}[15m]) > 3
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod {{`{{ $labels.pod }}`}} is crash-looping"
+              description: "Container {{`{{ $labels.container }}`}} in pod {{`{{ $labels.pod }}`}} has restarted more than 3 times in the last 15 minutes."
+
+          - alert: KubernetesImagePullBackOff
+            expr: kube_pod_container_status_waiting_reason{namespace="{{ .Values.watchNamespace }}", reason="ImagePullBackOff"} == 1
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod {{`{{ $labels.pod }}`}} cannot pull its image"
+              description: "Container {{`{{ $labels.container }}`}} in pod {{`{{ $labels.pod }}`}} has been in ImagePullBackOff for over 2 minutes - check the image name/tag and registry credentials."
+
+          - alert: NodeDiskFull
+            expr: (node_filesystem_avail_bytes{mountpoint="/", fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/", fstype!="tmpfs"}) * 100 < 10
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Node {{`{{ $labels.instance }}`}} is low on disk space"
+              description: "Root filesystem on {{`{{ $labels.instance }}`}} has less than 10% free space."
+
+          - alert: NodeDown
+            expr: up{job="node-exporter"} == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Node exporter on {{`{{ $labels.instance }}`}} is unreachable"
+              description: "Prometheus has not been able to scrape node-exporter on {{`{{ $labels.instance }}`}} for 5 minutes - the node may be down or NotReady."

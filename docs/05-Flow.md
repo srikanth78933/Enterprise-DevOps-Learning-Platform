@@ -1,50 +1,46 @@
-# Log Pipeline Flow — Project 5
+# Metrics & Alert Flow — Project 6
 
-Full diagram: [`/architecture/log-flow.md`](../architecture/log-flow.md).
+Full diagram: [`/architecture/metrics-flow.md`](../architecture/metrics-flow.md).
 
-## End-to-end, one request
+## Scrape cycle (every 30s, per `global.scrape_interval`)
 
-1. A client calls `GET /api/employees/999999`
-2. `RequestLoggingFilter` assigns a `requestId`, lets the request proceed
-3. `EmployeeServiceImpl` throws `ResourceNotFoundException`
-4. `GlobalExceptionHandler.handleNotFound` logs at WARN:
-   `resource_not_found uri=/api/employees/999999 message=...`
-   (with `requestId` attached via MDC, no stack trace — this is expected
-   client behavior, not a system failure)
-5. `RequestLoggingFilter`'s `finally` block logs the request line:
-   `request method=GET uri=/api/employees/999999 status=404 durationMs=12`
-   (same `requestId`)
-6. Both lines are written as JSON to stdout by `logback-spring.xml`'s
-   non-dev appender
-7. The container runtime captures stdout to
-   `/var/log/containers/backend-<pod>-<container>.log` on the node
-8. Filebeat (already tailing that file via Kubernetes autodiscover) ships
-   both lines to Logstash over the beats protocol
-9. Logstash's `json` filter parses `message` into the `app.*` fields, adds
-   the `error_log` tag if `app.level == ERROR` (not triggered here — WARN
-   isn't ERROR) or matches `slow_request`/`request_log` patterns
-10. Elasticsearch indexes both documents into
-    `enterprise-devops-logs-2026.07.11`
-11. Kibana's Discover, searching `app.requestId: "<the-id>"`, shows both
+1. Prometheus's `kubernetes-pods` job re-runs pod discovery against the
+   Kubernetes API (`role: pod`), filters to pods with
+   `prometheus.io/scrape: "true"`, and scrapes each at the annotated path/port
+2. The `kubernetes-nodes-cadvisor` job re-runs node discovery (`role:
+   node`), and for each node, proxies through the API server to that
+   node's kubelet `/metrics/cadvisor` endpoint
+3. `node-exporter` and `kube-state-metrics` jobs hit their fixed Service
+   targets directly
+4. All scraped samples are written to Prometheus's local TSDB (the PVC)
 
-## Why request logging happens in a Filter, not an Interceptor
+## Alert evaluation cycle (every 30s, per `global.evaluation_interval`)
 
-A `Filter` runs before Spring's `DispatcherServlet` and wraps the *entire*
-request lifecycle, including cases that never reach a controller method at
-all (404s for unmapped routes, requests rejected by CORS). A
-`HandlerInterceptor` only fires once a handler is resolved — it would miss
-exactly the kind of "this route doesn't exist" traffic that's often the
-most useful to see in a request log.
+1. Every rule in `rules.yml` is evaluated against current TSDB data
+2. If a rule's expression is true, the alert enters `Pending` state
+3. If it's still true after the rule's `for:` duration, it transitions to
+   `Firing` and gets pushed to Alertmanager
+4. If the expression stops being true at any point before `for:` elapses,
+   it resets to inactive — this is why `HighCPUUsage`'s `for: 5m` matters:
+   a brief spike doesn't page anyone, only sustained load does
 
-## Why MDC instead of just including requestId in every log call manually
+## Why `for:` durations differ per alert
 
-`MDC.put("requestId", ...)` (in `RequestLoggingFilter`) makes every log
-statement *anywhere* in the call stack for that request — including ones
-in code that has no idea a request is even in flight, like a repository or
-service method — automatically carry that field once
-`logstash-logback-encoder` picks it up. Threading a `requestId` parameter
-through every method signature by hand would be significantly more
-invasive for the same result.
+| Alert | `for:` | Why |
+|---|---|---|
+| `HighCPUUsage`/`HighMemoryUsage` | 5m | Brief spikes are normal; only sustained pressure matters |
+| `PodCrashLooping` | 5m | The `increase(...)[15m]) > 3` window already requires repeated failures; `for: 5m` avoids alerting on the very first restart |
+| `KubernetesImagePullBackOff` | 2m | This is never transient/expected — alert fast |
+| `NodeDiskFull` | 5m | Avoids flapping on momentary disk pressure from a burst write |
+| `NodeDown` | 5m | Avoids alerting on a brief network blip between Prometheus and the node |
+
+## Grafana's role — it doesn't store anything
+
+Every panel in all three dashboards is a live PromQL query against
+Prometheus, run each time the dashboard is viewed or auto-refreshes.
+Grafana itself only persists dashboard *definitions* (in its own PVC) and
+user/session state — deleting and reinstalling Grafana loses none of your
+actual metric history, since that lives in Prometheus's PVC instead.
 
 ## Next
 

@@ -1,45 +1,41 @@
-# Cleanup — Project 5: Centralized Logging (ELK)
+# Cleanup — Project 6: Monitoring (Prometheus & Grafana)
 
-## 1. Delete the logging Application (removes everything it deployed)
+## 1. Delete the monitoring Application (removes everything it deployed)
 
 ```bash
-kubectl delete -f gitops/applications/logging-stack.yaml
+kubectl delete -f gitops/applications/monitoring-stack.yaml
 ```
 
-The finalizer means this also removes Elasticsearch's StatefulSet, PVC,
-Logstash, Filebeat's DaemonSet + RBAC, and Kibana + its Ingress.
+Removes Prometheus (+ PVC), Alertmanager (+ PVC), Grafana (+ PVC +
+Ingress), node-exporter's DaemonSet, and kube-state-metrics + its RBAC.
 
-## 2. Confirm the Elasticsearch PVC is actually gone
-
-`prune: true` should remove it along with everything else, but PVCs from
-StatefulSets sometimes need an explicit check:
+## 2. Confirm PVCs are actually gone
 
 ```bash
-kubectl get pvc -n logging
+kubectl get pvc -n monitoring
 # if anything remains:
-kubectl delete pvc -n logging --all
+kubectl delete pvc -n monitoring --all
 ```
 
-## 3. Remove the TLS secret and namespace
+## 3. Remove secrets and the namespace
 
 ```bash
-kubectl delete secret kibana-tls -n logging
-kubectl delete namespace logging
+kubectl delete secret grafana-admin grafana-tls -n monitoring
+kubectl delete namespace monitoring
 ```
 
 ## 4. Revert any temporary demo changes
 
-If you followed `docs/04-Step-by-Step.md` step 3 (lowering
-`slowRequestThresholdMs` via a direct `helm upgrade`), make sure that's
-reverted via a proper Git-tracked change, not left as drift — Argo CD's
-`selfHeal` on `enterprise-app` (Project 4) will otherwise fight with it
-next sync.
+If you followed `docs/04-Step-by-Step.md` (lowering `backend.resources
+.limits.cpu`, or setting a bad `backend.image.tag` to trigger
+`ImagePullBackOff`), confirm both are reverted via a proper Git-tracked
+change — not left as drift against `enterprise-app`'s `selfHeal: true`
+release.
 
 ## What you're NOT tearing down here
 
-`enterprise-app`, the EKS cluster, and Argo CD itself are untouched by
-this cleanup — see Project 4's `docs/07-Cleanup.md` if you're tearing
-down everything.
+`enterprise-app`, `elk-stack`, the EKS cluster, and Argo CD itself are
+untouched by this cleanup.
 
 ## Next
 

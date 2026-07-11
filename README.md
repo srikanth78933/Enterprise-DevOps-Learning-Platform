@@ -1,62 +1,71 @@
-# Project 5 — Centralized Logging (ELK)
+# Project 6 — Monitoring (Prometheus & Grafana)
 
 Part of the [Enterprise DevOps Learning Platform](https://github.com/srikanth78933/Enterprise-DevOps-Learning-Platform).
-This branch continues from `project-04-gitops-argocd` and adds centralized
-logging: Elasticsearch, Logstash, Filebeat, and Kibana, deployed as an
-independent Argo CD-managed Helm release. **This is the first project
-branch with real backend code changes** — logging instrumentation, not
-business logic.
+This branch continues from `project-05-logging-elk` and adds
+metrics-based observability: Prometheus, Alertmanager, Grafana,
+node-exporter, and kube-state-metrics, deployed as a third independent
+Argo CD-managed Helm release. **No backend code changes** — the JVM/HTTP
+metrics this project visualizes have been exposed since `main` via
+`spring-boot-starter-actuator` + `micrometer-registry-prometheus`.
 
 ```
-Application (stdout, JSON) -> Filebeat -> Logstash -> Elasticsearch -> Kibana
+node-exporter, kube-state-metrics, backend (actuator/prometheus)
+  -> Prometheus (scrape + evaluate alert rules)
+  -> Alertmanager (route/dedupe alerts)
+  -> Grafana (dashboards, queries Prometheus)
 ```
 
 ## What you'll learn
 
-The ELK stack's roles (shipper, pipeline, store, UI), StatefulSets +
-`volumeClaimTemplates`, DaemonSets, Kubernetes RBAC for a log shipper,
-StorageClasses, resource limits at logging-infrastructure scale, Ingress
-with TLS, and how to design application logging (structured JSON,
-request/slow-request/exception categorization) so a log pipeline is
-actually useful.
+Application metrics vs. cluster/node/pod metrics, CPU/memory/restart-count/
+latency/availability as concrete PromQL queries, and how to design alerts
+(and alert routing) around them — no Prometheus Operator/CRDs, every
+scrape target and alert rule is a plain YAML file.
 
 ## What's new in this branch
 
 ```
-├── backend/src/main/resources/logback-spring.xml   JSON logs (prod) vs plain (dev)
-├── backend/.../filter/RequestLoggingFilter.java     Request + slow-request logging
-├── backend/.../exception/GlobalExceptionHandler.java  Now actually logs (WARN vs ERROR)
-├── logging/elk-stack/                Umbrella chart: elasticsearch, logstash, filebeat, kibana
-├── gitops/applications/logging-stack.yaml   Independent Argo CD Application
-├── architecture/log-flow.md          Full pipeline diagram + log-category reference
-├── scripts/
-│   ├── generate-self-signed-tls.sh   TLS for Kibana's Ingress
-│   ├── kibana-port-forward.sh        Quick local access
-│   ├── tail-logs.sh                  Raw kubectl logs, bypassing ELK (for comparison)
-│   └── generate-test-traffic.sh      Produces sample logs across all 5 categories
-└── docs/                             01-Prerequisites through 09-Interview-Questions, scoped to this project
+├── monitoring/monitoring-stack/         Umbrella chart
+│   └── charts/
+│       ├── prometheus/                    Scrape config, 6 alert rules, RBAC, PVC
+│       ├── alertmanager/                  Routing (no-op by default, optional Slack)
+│       ├── grafana/                       3 dashboards, Ingress+TLS
+│       ├── node-exporter/                 DaemonSet, host metrics
+│       └── kube-state-metrics/            K8s object state as metrics
+├── gitops/applications/monitoring-stack.yaml   Third independent Argo CD Application
+├── architecture/metrics-flow.md          Full pipeline + alert-routing diagrams
+└── scripts/
+    ├── grafana-port-forward.sh / prometheus-port-forward.sh
+    ├── generate-load.sh                  Trigger HPA + CPU/memory alert conditions
+    └── check-alerts.sh                   Query Prometheus's API for firing alerts
 ```
 
-No changes to `helm/enterprise-app/`, either Jenkinsfile, or `terraform/`
-— this project is additive.
+One small addition to `helm/enterprise-app/`: `prometheus.io/scrape`
+annotations on the backend's pod template, so Prometheus auto-discovers
+it — no `monitoring-stack` change needed to add or remove scrape targets
+from the application side.
+
+## Alerts configured out of the box
+
+`HighCPUUsage`, `HighMemoryUsage` (>80% of container limits),
+`PodCrashLooping`, `KubernetesImagePullBackOff`, `NodeDiskFull` (<10%
+free), `NodeDown`. All visible in the Alertmanager UI immediately; Slack
+routing is opt-in (see `docs/08-Assignments.md`).
 
 ## Quick start
 
-1. `./scripts/generate-self-signed-tls.sh kibana.enterprise-devops.example.com kibana-tls logging`
-2. Update `repoURL` in `gitops/applications/logging-stack.yaml` to your fork
-3. `kubectl apply -f gitops/applications/logging-stack.yaml`
-4. `./scripts/kibana-port-forward.sh` then open http://localhost:5601
-5. `./scripts/generate-test-traffic.sh` to produce sample logs, then explore
-   Discover in Kibana
+1. `kubectl create secret generic grafana-admin ...` (see
+   `monitoring/monitoring-stack/README.md`)
+2. `./scripts/generate-self-signed-tls.sh grafana.enterprise-devops.example.com grafana-tls monitoring`
+3. `kubectl apply -f gitops/applications/monitoring-stack.yaml`
+4. `./scripts/grafana-port-forward.sh` then open http://localhost:3000
+5. `./scripts/generate-load.sh` to make the dashboards (and maybe the
+   alerts) move
 
 Full walkthrough: [`docs/03-Installation.md`](docs/03-Installation.md).
 
-## Next branch
+## Next branches
 
-`project-06-monitoring-prometheus-grafana` adds metrics-based observability
-(Prometheus, Alertmanager, Grafana) alongside the logging this project
-established.
-
-```bash
-git checkout project-06-monitoring-prometheus-grafana
-```
+Later projects (`project-07-security`, `project-08-service-mesh-istio`,
+`project-09-observability`, `project-10-production`) will extend this
+same pattern with one more production capability each.

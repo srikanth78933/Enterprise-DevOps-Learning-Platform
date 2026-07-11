@@ -1,66 +1,63 @@
-# Troubleshooting — Project 5: Centralized Logging (ELK)
+# Troubleshooting — Project 6: Monitoring (Prometheus & Grafana)
 
-## Elasticsearch pod stuck `CrashLoopBackOff` with a `max virtual memory areas` error
+## A scrape target shows `DOWN` on http://localhost:9090/targets
 
-`vm.max_map_count` isn't set high enough on the node. Confirm the
-`sysctl` init container actually ran (`kubectl describe pod
-elasticsearch-0 -n logging`) — if your cluster's admission policy blocks
-privileged init containers, set `elasticsearch.sysctlInitContainer.enabled:
-false` in `logging/elk-stack/values.yaml` and set
-`vm.max_map_count=262144` at the node level instead (via a custom launch
-template's user-data, or a separate privileged DaemonSet your platform
-team already runs for this purpose).
+Click the target for the actual error. Common causes:
 
-## Elasticsearch pod `Pending` forever
+- **`kubernetes-pods` / backend**: the pod doesn't have the
+  `prometheus.io/scrape` annotation — confirm `kubectl get pod <backend-pod>
+  -n enterprise-devops -o jsonpath='{.metadata.annotations}'` shows it. If
+  missing, `enterprise-app`'s release is running an older chart version
+  before this project added it — trigger a sync.
+- **`kubernetes-nodes-cadvisor`**: usually an RBAC issue — confirm
+  `monitoring/monitoring-stack/charts/prometheus/templates/rbac.yaml`'s
+  ClusterRole actually synced (`kubectl get clusterrole prometheus`) and
+  that `nodes/proxy` + the `/metrics/cadvisor` nonResourceURL are both
+  present.
+- **`node-exporter` / `kube-state-metrics`**: confirm the Service name
+  matches exactly what Prometheus's static target references (`kubectl
+  get svc -n monitoring`) — both are hardcoded, not values-driven, per the
+  comment in `configmap.yaml`.
 
-Almost always the PVC. `kubectl describe pvc data-elasticsearch-0 -n
-logging` — check the `gp2` StorageClass exists
-(`kubectl get storageclass`) and that your node group has capacity in the
-same AZ as wherever the PV gets provisioned.
+## Alert never fires even though the condition looks true
 
-## `kubectl get daemonset filebeat -n logging` shows fewer `READY` than `DESIRED`
+Check the raw expression yourself at http://localhost:9090/graph — paste
+the alert's `expr` in directly. If it returns no data, the underlying
+metric name might not exist yet (a metric only appears in Prometheus
+after at least one successful scrape that produced it) or a label
+selector (like `namespace="enterprise-devops"`) doesn't match what's
+actually being scraped.
 
-```bash
-kubectl describe daemonset filebeat -n logging
-kubectl logs -l app.kubernetes.io/name=filebeat -n logging --previous
-```
+## Grafana dashboards show "No data" on every panel
 
-Common cause: the ClusterRole/ClusterRoleBinding
-(`logging/elk-stack/charts/filebeat/templates/rbac.yaml`) didn't sync —
-check Argo CD didn't reject them (see
-`gitops/projects/enterprise-devops-project.yaml`'s
-`clusterResourceWhitelist` — Project 5 added `ClusterRole`/
-`ClusterRoleBinding` there specifically for this).
+Confirm the Prometheus datasource is actually reachable: Grafana →
+Connections → Data sources → Prometheus → Test. If that fails, check
+`grafana.prometheus.host` in
+`monitoring/monitoring-stack/values.yaml` matches the actual Prometheus
+Service name (`prometheus`, fixed — see that chart's `_helpers.tpl`).
 
-## No documents showing up in Kibana at all
+## Grafana pod `CrashLoopBackOff` with a permissions error on `/var/lib/grafana`
 
-Work backward through the pipeline:
+The `fsGroup: 472` securityContext in
+`charts/grafana/templates/deployment.yaml` should prevent this on a fresh
+PVC — if you're reusing a PVC from before this was added, either delete
+it (losing dashboard customizations, not metric data) or manually `chown`
+via a one-off debug pod.
 
-```bash
-./scripts/tail-logs.sh                                    # 1. is the app actually emitting JSON?
-kubectl logs -l app.kubernetes.io/name=filebeat -n logging | grep -i error   # 2. is Filebeat erroring?
-kubectl logs -l app.kubernetes.io/name=logstash -n logging | tail -50        # 3. is Logstash erroring?
-curl http://localhost:9200/_cat/indices?v                 # 4. (via port-forward) does the index exist at all?
-```
+## Alertmanager shows alerts but Slack never gets a message
 
-## Logs show up but `app.level`/`app.message` fields are missing (just raw `message`)
+Confirm `alertmanager.slack.enabled: true` was actually set (it's `false`
+by default — see `docs/08-Assignments.md`), and that the
+`alertmanager-slack` Secret's `slack-webhook-url` key contains a real,
+currently-valid Slack incoming webhook URL (regenerate it if the workspace
+integration was ever reset).
 
-Logstash's `json` filter is gated on
-`[kubernetes][labels][app_kubernetes_io/name] == "backend"` — confirm the
-backend Deployment actually carries that label (it does, via
-`helm/enterprise-app/charts/backend/templates/_helpers.tpl`'s
-`backend.selectorLabels`) and that Filebeat's `add_kubernetes_metadata`
-processor is attaching it (check one raw document in Kibana — expand
-`kubernetes.labels` and confirm the key is present, possibly dedotted to
-`app_kubernetes_io/name`).
+## `generate-load.sh` doesn't move the needle on CPU/memory panels
 
-## `Wait for Argo CD Sync` isn't relevant here — why?
-
-Neither Jenkinsfile changed in this project. `logging-stack` is deployed
-by directly applying `gitops/applications/logging-stack.yaml` (see
-`docs/03-Installation.md`), not through a Jenkins pipeline — there's no
-image to build for infrastructure-as-Helm-chart the way there is for the
-application tier.
+The backend's default resource limits may simply be generous enough that
+this workload doesn't saturate them — see step 3 of
+`docs/04-Step-by-Step.md` for temporarily lowering the limit for a
+reliable demo.
 
 ## Next
 

@@ -1,0 +1,27 @@
+apiVersion: v2
+name: monitoring-stack
+description: >-
+  Observability for the Enterprise DevOps Learning Platform - Prometheus,
+  Alertmanager, Grafana, node-exporter, and kube-state-metrics as one
+  Argo CD-managed release, deployed independently of enterprise-app and
+  elk-stack.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: prometheus
+    version: "1.0.0"
+    repository: "file://charts/prometheus"
+  - name: alertmanager
+    version: "1.0.0"
+    repository: "file://charts/alertmanager"
+  - name: grafana
+    version: "1.0.0"
+    repository: "file://charts/grafana"
+  - name: node-exporter
+    version: "1.0.0"
+    repository: "file://charts/node-exporter"
+  - name: kube-state-metrics
+    version: "1.0.0"
+    repository: "file://charts/kube-state-metrics"
