@@ -61,6 +61,22 @@ NGINX Ingress evaluates paths in the order Kubernetes returns them, and
 `pathType: Prefix` on `/` will happily also match `/api/employees` if it's
 evaluated first.
 
+## Frontend loads fine but every page shows "Network Error"
+
+The page itself loaded (so the Ingress/Service/Deployment are all fine),
+but its API calls are failing at the network level, not with a CORS
+rejection. `frontend/src/api/apiClient.js` falls back to
+`http://localhost:8080/api` when `REACT_APP_API_BASE_URL` isn't set —
+and React inlines that value into the built JS at `npm run build` time,
+not at runtime, so if the pipeline's Build stage doesn't set it, every
+deployed user's browser tries to reach `localhost:8080` on *their own
+machine*, not the cluster. `frontend/Jenkinsfile`'s Build stage sets
+`REACT_APP_API_BASE_URL=/api` (a relative path, not an absolute
+hostname) specifically to avoid this — confirm that's still there if you
+hit this again, and re-run the frontend pipeline to rebuild the image
+with the fix baked in (an already-built image can't be patched, only
+rebuilt).
+
 ## Next
 
 Continue to [07-Cleanup.md](./07-Cleanup.md).

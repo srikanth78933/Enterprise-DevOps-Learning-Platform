@@ -70,7 +70,14 @@ pipeline {
         stage('Build') {
             steps {
                 dir('frontend') {
-                    sh 'CI=true npm run build'
+                    // Relative path, not an absolute hostname: React inlines this at
+                    // build time (it can't be changed at runtime), and the Ingress
+                    // already serves both frontend and backend on the same host, so
+                    // a relative baseURL resolves correctly no matter what hostname
+                    // the browser actually used, and never needs CORS at all (same
+                    // origin). An absolute URL here would only ever work for the one
+                    // hostname it was built with.
+                    sh 'CI=true REACT_APP_API_BASE_URL=/api npm run build'
                 }
             }
             post {

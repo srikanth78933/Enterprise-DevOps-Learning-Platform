@@ -104,6 +104,30 @@ This confirms the actual point of Project 3: `enterprise-backend-pipeline`
 and `enterprise-frontend-pipeline` each shipped independently, without
 either one's run touching the other's currently-deployed image tag.
 
+## 8. Frontend loaded, but every page showed "Network Error"
+
+Pods, Service, and Ingress were all healthy — the actual React bundle
+had `http://localhost:8080/api` baked in as its API base URL.
+`frontend/src/api/apiClient.js` falls back to that value when
+`REACT_APP_API_BASE_URL` isn't set, and React inlines env vars at
+`npm run build` time, not runtime (the "env-config.js injected in
+Kubernetes" idea mentioned in that file's comment was never actually
+built). `frontend/Jenkinsfile`'s Build stage never set it, so every
+visitor's browser tried to reach `localhost:8080` on their own machine.
+
+Fixed by setting `REACT_APP_API_BASE_URL=/api` (a relative path, not an
+absolute hostname) in the Build stage — since the Ingress serves both
+services on the same host, a relative base URL resolves correctly
+regardless of hostname and needs no CORS configuration at all (same
+origin). Required a full pipeline re-run to take effect - an
+already-built, already-pushed image can't be patched in place, only
+rebuilt.
+
+Also needed, unrelated to the app itself: the Ingress hostname
+(`enterprise-devops.example.com`) isn't real public DNS, so browser
+access requires a local hosts-file entry pointing it at the Ingress
+Load Balancer's IP — see `docs/03-Installation.md` step 5.
+
 ## Net result
 
 Same shape as Project 2's log: most of the real work here was cluster
