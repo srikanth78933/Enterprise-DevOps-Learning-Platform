@@ -1,0 +1,32 @@
+<!--
+  Real settings.xml used by the Jenkinsfile's "Publish to Nexus" stage
+  (`mvn deploy -s jenkins/nexus-settings.xml`). Safe to commit: it contains
+  no credentials, only references to NEXUS_CREDENTIALS_USR/_PSW, the env
+  vars Jenkins injects at build time from the "nexus-credentials" credential
+  (see jenkins/README.md). Maven resolves ${env.X} against the process
+  environment - if you run `mvn deploy` locally with this file, it'll fail
+  authentication unless you export those two variables yourself first.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+
+    <pluginGroups>
+        <pluginGroup>org.sonarsource.scanner.maven</pluginGroup>
+    </pluginGroups>
+
+    <servers>
+        <!-- ids must match backend/pom.xml's <distributionManagement> repository ids -->
+        <server>
+            <id>nexus-releases</id>
+            <username>${env.NEXUS_CREDENTIALS_USR}</username>
+            <password>${env.NEXUS_CREDENTIALS_PSW}</password>
+        </server>
+        <server>
+            <id>nexus-snapshots</id>
+            <username>${env.NEXUS_CREDENTIALS_USR}</username>
+            <password>${env.NEXUS_CREDENTIALS_PSW}</password>
+        </server>
+    </servers>
+
+</settings>

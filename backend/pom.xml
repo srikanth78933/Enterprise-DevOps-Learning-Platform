@@ -13,7 +13,13 @@
 
     <groupId>com.enterprise.devops</groupId>
     <artifactId>enterprise-devops-backend</artifactId>
-    <version>1.0.0</version>
+    <!-- -SNAPSHOT deliberately: this pipeline runs `mvn deploy` on every
+         build (see the "Publish to Nexus" stage in the Jenkinsfile).
+         Nexus's default maven-releases repo rejects redeploying an
+         existing version, so a fixed "1.0.0" would fail on the second
+         build onward. Snapshots allow repeated overwrites - switch to a
+         real release version only as part of an actual release process. -->
+    <version>1.0.0-SNAPSHOT</version>
     <name>enterprise-devops-backend</name>
     <description>Backend REST API for the Enterprise DevOps Learning Platform</description>
     <packaging>jar</packaging>
@@ -77,6 +83,19 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <!-- Repository ids must match jenkins/nexus-settings.xml's <servers>
+         entries - that's how Maven knows which credentials to use for each. -->
+    <distributionManagement>
+        <repository>
+            <id>nexus-releases</id>
+            <url>http://13.36.239.212:8081/repository/maven-releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>nexus-snapshots</id>
+            <url>http://13.36.239.212:8081/repository/maven-snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
 
     <build>
         <finalName>enterprise-devops-backend</finalName>

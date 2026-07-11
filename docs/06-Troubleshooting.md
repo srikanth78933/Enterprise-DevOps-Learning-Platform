@@ -28,6 +28,25 @@ step 5 of [`jenkins/README.md`](../jenkins/README.md).
 - Confirm `IMAGE_NAME` in the Jenkinsfile actually starts with your Docker
   Hub namespace — pushing to a namespace you don't own always 401s
 
+## `mvn deploy` fails with `401 Unauthorized` against Nexus
+
+The `nexus-credentials` Jenkins credential is missing/wrong, or the
+credential IDs in `jenkins/nexus-settings.xml`'s `<servers>` block
+(`nexus-releases`, `nexus-snapshots`) don't match `backend/pom.xml`'s
+`<distributionManagement>` repository ids exactly — Maven silently uses
+no authentication at all if the ids don't line up, rather than erroring
+about the mismatch itself.
+
+## `mvn deploy` fails with `400 Bad Request` / `repository does not allow updating assets`
+
+You deployed a non-SNAPSHOT version twice. Nexus's `maven-releases` repo
+is immutable by design — the same `groupId:artifactId:version` can only
+be uploaded once. This is exactly why `backend/pom.xml`'s version is
+`1.0.0-SNAPSHOT`, which resolves to `maven-snapshots` (redeployable) —
+if you changed the version back to a fixed release number, either bump it
+on every build or accept that only the first deploy of that version
+succeeds.
+
 ## Quality Gate fails but you can't tell why
 
 Open the SonarQube project dashboard (linked from the Jenkins build's

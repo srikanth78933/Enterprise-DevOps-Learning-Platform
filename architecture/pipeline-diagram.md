@@ -17,7 +17,8 @@ flowchart TD
     end
 
     G --> H[Package Jar<br/>mvn package -DskipTests]
-    H --> I[Docker Build<br/>backend-ci.Dockerfile]
+    H --> H2[Publish to Nexus<br/>mvn deploy]
+    H2 --> I[Docker Build<br/>backend-ci.Dockerfile]
     I --> J[Push Docker Image<br/>Docker Hub]
     J --> K[Pipeline success]
 ```
@@ -30,6 +31,7 @@ sequenceDiagram
     participant GH as Git Repository
     participant J as Jenkins
     participant SQ as SonarQube
+    participant NX as Nexus
     participant DH as Docker Hub
 
     Dev->>GH: git push
@@ -48,6 +50,8 @@ sequenceDiagram
             J->>J: mvn dependency:tree audit
         end
         J->>J: mvn package -DskipTests (jar archived)
+        J->>NX: mvn deploy -s jenkins/nexus-settings.xml
+        NX-->>J: artifact stored (maven-snapshots)
         J->>J: docker build -f backend-ci.Dockerfile
         J->>DH: docker push (build number + latest tags)
         DH-->>J: push acknowledged

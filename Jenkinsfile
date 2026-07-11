@@ -1,23 +1,31 @@
 // Project 1 - Enterprise CI Pipeline
 //
 // Flow: Git -> Checkout -> Maven Build -> Unit Test -> SonarQube -> Quality Gate
-//       -> Parallel Stage -> Package Jar -> Docker Build -> Push Docker Image
+//       -> Parallel Stage -> Package Jar -> Publish to Nexus -> Docker Build
+//       -> Push Docker Image
 //
-// Prerequisites (see jenkins/README.md for full setup):
-//   - Jenkins tools configured: JDK named "jdk21", Maven named "maven3"
-//   - Jenkins credentials: "dockerhub-credentials" (username/password), scoped to this pipeline
-//   - A SonarQube server configured in Jenkins named "sonarqube-server", with the
-//     SonarQube Scanner for Jenkins plugin installed and a webhook back to Jenkins
-//     for the quality gate to report asynchronously (Manage Jenkins > System > SonarQube servers)
-//   - docker CLI available on the Jenkins agent, logged-in-capable (docker.sock mounted
-//     if the agent itself runs in a container)
+// Wired to this deployment's actual infrastructure (see jenkins/README.md
+// for the exact one-time setup this Jenkinsfile assumes):
+//   - Jenkins:    http://15.237.252.11:8080
+//   - SonarQube:  http://35.180.226.19:9000
+//   - Nexus:      http://13.36.239.212:8081
+//   - Docker Hub: docker.io/devopstraining064
+//
+// Prerequisites:
+//   - Jenkins tools configured: JDK named "java21", Maven named "maven3.9.16"
+//   - Jenkins credentials: "dockerhub-credentials" and "nexus-credentials"
+//     (both "Username with password"), scoped to this pipeline
+//   - A SonarQube server configured in Jenkins named "sonarqube-server",
+//     pointed at http://35.180.226.19:9000, with a webhook back to Jenkins
+//     for the quality gate to report asynchronously
+//   - docker CLI available on the Jenkins agent, logged-in-capable
 
 pipeline {
     agent any
 
     tools {
-        jdk 'jdk21'
-        maven 'maven3'
+        jdk 'java21'
+        maven 'maven3.9.16'
     }
 
     options {
@@ -29,9 +37,9 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
+        NEXUS_CREDENTIALS     = credentials('nexus-credentials')
         SONARQUBE_ENV         = 'sonarqube-server'
-        // Replace with your own Docker Hub namespace before running against a real registry.
-        IMAGE_NAME            = 'yourdockerhubuser/enterprise-devops-backend'
+        IMAGE_NAME            = 'devopstraining064/devopstraining064'
         IMAGE_TAG             = "${env.BUILD_NUMBER}"
     }
 
@@ -112,6 +120,17 @@ pipeline {
             post {
                 success {
                     archiveArtifacts artifacts: 'backend/target/enterprise-devops-backend.jar', fingerprint: true
+                }
+            }
+        }
+
+        stage('Publish to Nexus') {
+            steps {
+                dir('backend') {
+                    // -s points at a settings.xml that's safe to commit (see that
+                    // file's header) - it only references NEXUS_CREDENTIALS_USR/_PSW,
+                    // which Jenkins injected above; no secret ever touches disk in git.
+                    sh 'mvn -B -ntp deploy -DskipTests -s ../jenkins/nexus-settings.xml'
                 }
             }
         }
