@@ -28,12 +28,12 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
-        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
 
         SONARQUBE_ENV   = 'sonarqube-server'
-        AWS_REGION      = 'us-east-1'
-        EKS_CLUSTER_NAME = 'enterprise-devops-dev-eks'
+        AWS_REGION      = 'eu-west-3'
+        EKS_CLUSTER_NAME = 'eks-cluster'
         K8S_NAMESPACE   = 'enterprise-devops'
 
         // Replace with your own Docker Hub namespace before running against a real registry.
