@@ -64,11 +64,12 @@ Manage Jenkins → Credentials → add a **Username with password** credential:
 
 Confirm Nexus has the two repositories the pipeline deploys to (Nexus
 ships with these by default under Repository → Repositories):
-- `maven-releases`
-- `maven-snapshots` ← this is the one actually used, since
-  `backend/pom.xml`'s version is `1.0.0-SNAPSHOT` (see that file's comment
-  for why — Nexus's release repo rejects redeploying the same version, and
-  this pipeline deploys on every build)
+- `maven-releases` ← this is the one actually used. The Jenkinsfile stamps
+  a unique `<base>-<BUILD_NUMBER>` version (e.g. `1.0.0-42`) into the
+  workspace pom before `mvn deploy`, so every build produces an immutable,
+  never-redeployed release version — see `backend/pom.xml`'s version
+  comment and the "Maven Build" stage.
+- `maven-snapshots` — not used by this pipeline, but present by default.
 
 ## 6. Docker on the agent
 

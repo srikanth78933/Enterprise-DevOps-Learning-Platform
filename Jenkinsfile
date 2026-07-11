@@ -40,7 +40,6 @@ pipeline {
         NEXUS_CREDENTIALS     = credentials('nexus-credentials')
         SONARQUBE_ENV         = 'sonarqube-server'
         IMAGE_NAME            = 'devopstraining064/devopstraining064'
-        IMAGE_TAG             = "${env.BUILD_NUMBER}"
     }
 
     stages {
@@ -54,6 +53,19 @@ pipeline {
         stage('Maven Build') {
             steps {
                 dir('backend') {
+                    script {
+                        // pom.xml stays on the floating "-SNAPSHOT" dev version in git.
+                        // Each build stamps a unique, immutable release version into the
+                        // workspace copy only, so the artifact is never overwritten in
+                        // Nexus and both Nexus and Docker Hub can always be traced back
+                        // to the exact Jenkins build that produced them.
+                        def devVersion = sh(
+                            script: "mvn -B -ntp -q -DforceStdout help:evaluate -Dexpression=project.version",
+                            returnStdout: true
+                        ).trim()
+                        env.IMAGE_TAG = "${devVersion.replace('-SNAPSHOT', '')}-${env.BUILD_NUMBER}"
+                        sh "mvn -B -ntp versions:set -DnewVersion=${env.IMAGE_TAG} -DgenerateBackupPoms=false"
+                    }
                     sh 'mvn -B -ntp clean compile'
                 }
             }
