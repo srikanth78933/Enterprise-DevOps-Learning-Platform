@@ -70,6 +70,27 @@ helm upgrade enterprise-app helm/enterprise-app -n enterprise-devops \
 backend pipeline's upgrade doesn't need to know (or accidentally reset)
 whatever image tag the frontend pipeline last set, and vice versa.
 
+## Published chart versions (OCI)
+
+Both Jenkinsfiles package and push this chart to Docker Hub as an OCI
+artifact before every deploy — same registry and credential already used
+for the Docker images, versioned `1.0.0-<build-number>`:
+
+```bash
+helm package helm/enterprise-app --version 1.0.0-<build> --app-version <image-tag> --destination .
+helm push enterprise-app-1.0.0-<build>.tgz oci://registry-1.docker.io/devopstraining064
+```
+
+Pull a specific past version if you need to inspect or roll back to it:
+
+```bash
+helm pull oci://registry-1.docker.io/devopstraining064/enterprise-app --version 1.0.0-<build>
+```
+
+This is purely a versioned, auditable record — `helm upgrade` in both
+pipelines still deploys from the freshly-checked-out `helm/enterprise-app/`
+directory, not a pulled package.
+
 ## Uninstall
 
 ```bash

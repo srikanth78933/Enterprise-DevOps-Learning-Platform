@@ -10,6 +10,7 @@ and [`/architecture/helm-chart-structure.md`](../architecture/helm-chart-structu
 | Checkout → Package Jar | Identical to Project 1/2's backend stages |
 | Docker Build | `docker build -f docker/backend-ci.Dockerfile` |
 | Push Image | `docker push` x2 tags |
+| Package & Push Helm Chart | `helm package` + `helm push` to `oci://registry-1.docker.io/devopstraining064` |
 | Helm Upgrade | `helm upgrade --install ... --reuse-values --set backend.image.tag=<version>-<build>` |
 | Verify | `kubectl rollout status deployment/backend`, then `scripts/verify-backend.sh` |
 
@@ -21,6 +22,7 @@ and [`/architecture/helm-chart-structure.md`](../architecture/helm-chart-structu
 | Build | `npm run build` |
 | Docker Build | `docker build -f docker/frontend-ci.Dockerfile` |
 | Push Image | `docker push` x2 tags |
+| Package & Push Helm Chart | `helm package` + `helm push` to `oci://registry-1.docker.io/devopstraining064` |
 | Helm Upgrade | `helm upgrade --install ... --reuse-values --set frontend.image.tag=<version>-<build>` |
 | Verify | `kubectl rollout status deployment/frontend`, then `scripts/verify-frontend.sh` |
 

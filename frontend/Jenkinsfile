@@ -1,11 +1,16 @@
 // Project 3 - Frontend CI/CD Pipeline (independent of backend/Jenkinsfile)
 //
 // Flow: Checkout -> Install & Test -> Build -> Docker Build -> Push Image
-//       -> Helm Upgrade (frontend only) -> Verify
+//       -> Package & Push Helm Chart -> Helm Upgrade (frontend only) -> Verify
 //
 // This pipeline only ever touches the `frontend` values of the
 // enterprise-app Helm release (--reuse-values), so it can run and deploy
 // completely independently of backend/Jenkinsfile.
+//
+// The chart itself is packaged and pushed to Docker Hub as an OCI artifact
+// before every deploy, purely for a versioned, auditable record of what was
+// deployed - see the matching comment in backend/Jenkinsfile for the full
+// reasoning (same tradeoff, same pattern, both pipelines push independently).
 //
 // Wired to this deployment's actual infrastructure:
 //   - Docker Hub:   docker.io/devopstraining064
@@ -92,6 +97,24 @@ pipeline {
                 sh "docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}"
                 sh "docker push ${FRONTEND_IMAGE}:latest"
                 sh 'docker logout'
+            }
+        }
+
+        stage('Package & Push Helm Chart') {
+            steps {
+                script {
+                    // Chart version follows the same "<base>-<build>" pattern as
+                    // the image tag - Chart.yaml's own version is the floating
+                    // dev baseline, this stamps a unique one per build.
+                    env.CHART_VERSION = "1.0.0-${env.BUILD_NUMBER}"
+                }
+                sh "helm package helm/enterprise-app --version ${CHART_VERSION} --app-version ${IMAGE_TAG} --destination ."
+                sh '''
+                    echo "$DOCKERHUB_CREDENTIALS_PSW" | helm registry login registry-1.docker.io -u "$DOCKERHUB_CREDENTIALS_USR" --password-stdin
+                '''
+                sh "helm push enterprise-app-${CHART_VERSION}.tgz oci://registry-1.docker.io/devopstraining064"
+                sh "rm -f enterprise-app-${CHART_VERSION}.tgz"
+                sh 'helm registry logout registry-1.docker.io'
             }
         }
 

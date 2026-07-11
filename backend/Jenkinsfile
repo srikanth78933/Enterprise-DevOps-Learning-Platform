@@ -2,13 +2,22 @@
 //
 // Flow: Checkout -> Maven Build -> Unit Test -> SonarQube -> Quality Gate
 //       -> Parallel Stage -> Package Jar -> Docker Build -> Push Image
-//       -> Helm Upgrade (backend only) -> Verify
+//       -> Package & Push Helm Chart -> Helm Upgrade (backend only) -> Verify
 //
 // This pipeline only ever touches the `backend` values of the enterprise-app
 // Helm release (--reuse-values), so it can run and deploy completely
 // independently of frontend/Jenkinsfile - the point of splitting them.
 // See jenkins/README.md for one-time setup (unchanged from Project 2, plus
 // `helm` now required on the agent).
+//
+// The chart itself is packaged and pushed to Docker Hub as an OCI artifact
+// before every deploy, purely for a versioned, auditable record of what was
+// deployed - the actual `helm upgrade` below still runs against the
+// just-checked-out helm/enterprise-app/ directory, not a pulled package, so
+// this stage doesn't change deploy behavior, only adds traceability. Both
+// pipelines push the same chart source independently (own chart version per
+// build) rather than only from one of them, keeping them fully independent -
+// see architecture/README.md for the tradeoff.
 //
 // Wired to this deployment's actual infrastructure:
 //   - Docker Hub:   docker.io/devopstraining064
@@ -150,6 +159,24 @@ pipeline {
                 sh "docker push ${BACKEND_IMAGE}:${IMAGE_TAG}"
                 sh "docker push ${BACKEND_IMAGE}:latest"
                 sh 'docker logout'
+            }
+        }
+
+        stage('Package & Push Helm Chart') {
+            steps {
+                script {
+                    // Chart version follows the same "<base>-<build>" pattern as
+                    // the image tag - Chart.yaml's own version is the floating
+                    // dev baseline, this stamps a unique one per build.
+                    env.CHART_VERSION = "1.0.0-${env.BUILD_NUMBER}"
+                }
+                sh "helm package helm/enterprise-app --version ${CHART_VERSION} --app-version ${IMAGE_TAG} --destination ."
+                sh '''
+                    echo "$DOCKERHUB_CREDENTIALS_PSW" | helm registry login registry-1.docker.io -u "$DOCKERHUB_CREDENTIALS_USR" --password-stdin
+                '''
+                sh "helm push enterprise-app-${CHART_VERSION}.tgz oci://registry-1.docker.io/devopstraining064"
+                sh "rm -f enterprise-app-${CHART_VERSION}.tgz"
+                sh 'helm registry logout registry-1.docker.io'
             }
         }
 

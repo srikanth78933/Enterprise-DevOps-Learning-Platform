@@ -13,7 +13,8 @@ flowchart TD
         B4 --> B5{Quality Gate}
         B5 -- pass --> B6[Parallel Stage] --> B7[Package Jar]
         B7 --> B8[Docker Build] --> B9[Push Image]
-        B9 --> B10["Helm Upgrade<br/>--set backend.image.tag"]
+        B9 --> B9c["Package & Push Helm Chart<br/>OCI push to Docker Hub"]
+        B9c --> B10["Helm Upgrade<br/>--set backend.image.tag"]
         B10 --> B11[Verify backend]
     end
 
@@ -21,7 +22,8 @@ flowchart TD
         direction TB
         F1[Checkout] --> F2["Install & Test<br/>npm ci / test"] --> F3["Build<br/>npm run build"]
         F3 --> F4[Docker Build] --> F5[Push Image]
-        F5 --> F6["Helm Upgrade<br/>--set frontend.image.tag"]
+        F5 --> F5c["Package & Push Helm Chart<br/>OCI push to Docker Hub"]
+        F5c --> F6["Helm Upgrade<br/>--set frontend.image.tag"]
         F6 --> F7[Verify frontend]
     end
 
@@ -62,5 +64,17 @@ sequenceDiagram
     Helm-->>FEJ: frontend.image.tag=17, backend.image.tag=41 (preserved)
     Note right of Helm: Only the frontend Deployment rolls
 ```
+
+## Why the chart is also pushed to Docker Hub
+
+`Package & Push Helm Chart` packages `helm/enterprise-app` and pushes it
+as an OCI artifact to `oci://registry-1.docker.io/devopstraining064`,
+versioned the same way as the image tag (`1.0.0-<build>`). This is purely
+for a versioned, auditable record of what was deployed — reuses the same
+Docker Hub registry and `dockerhub-credentials` already used for images,
+rather than standing up a separate chart repository (e.g. Nexus's `helm`
+format) just for this. The actual `Helm Upgrade` stage right after still
+deploys from the freshly-checked-out `helm/enterprise-app/` directory, not
+a pulled package, so this stage doesn't change deploy behavior.
 
 Full Helm chart structure: [`helm-chart-structure.md`](./helm-chart-structure.md).
