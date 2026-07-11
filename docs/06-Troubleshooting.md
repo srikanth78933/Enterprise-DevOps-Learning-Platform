@@ -1,52 +1,46 @@
-# Troubleshooting (main branch)
+# Troubleshooting — Project 1: Enterprise CI Pipeline
 
-## Backend fails to start: `Communications link failure`
+## `waitForQualityGate` times out after 10 minutes
 
-MySQL isn't reachable yet. Confirm the container is running and healthy:
+The SonarQube → Jenkins webhook isn't configured (or is pointed at the
+wrong URL). Check SonarQube Administration → Webhooks — the URL must be
+`http://<jenkins-url>/sonarqube-webhook/` (trailing slash matters) and
+reachable from the SonarQube server's network, not just your browser's.
 
-```bash
-docker ps --filter name=devops-mysql
-docker logs devops-mysql
-```
+## `mvn sonar:sonar` fails with `Not authorized. Please check the properties sonar.login...`
 
-If using `docker compose`, the `backend` service already waits on
-`mysql`'s healthcheck — if it's still failing, the healthcheck itself is
-failing; check `docker compose logs mysql`.
+Your SonarQube server credential in Jenkins (Manage Jenkins → System →
+SonarQube servers) is missing, expired, or wrong. Regenerate a token in
+SonarQube (My Account → Security) and update the Jenkins credential.
 
-## `Table 'enterprise_devops.employees' doesn't exist`
+## `docker: command not found` on the Docker Build stage
 
-`spring.jpa.hibernate.ddl-auto` is `update` in the `dev` profile, which
-creates tables automatically on first boot. If you switched to the `prod`
-profile (`ddl-auto: validate`) against an empty database, tables were never
-created. Either run once with `dev`, or apply a schema migration manually.
+The Jenkins agent doesn't have the Docker CLI installed, or (if Jenkins
+itself runs in a container) the host's `docker.sock` isn't mounted. See
+step 5 of [`jenkins/README.md`](../jenkins/README.md).
 
-## Frontend shows "Network Error" on every page
+## `docker push` fails with `unauthorized: authentication required`
 
-- Confirm the backend is actually up: `curl http://localhost:8080/api/health`
-- Confirm `frontend/.env` has `REACT_APP_API_BASE_URL=http://localhost:8080/api`
-  (copy from `.env.example` if missing) and restart `npm start` — React only
-  reads `.env` at process startup
+- Confirm the `dockerhub-credentials` credential ID matches exactly what's
+  in the Jenkinsfile
+- Confirm you used a Docker Hub **access token**, not your account password
+  (Docker Hub deprecated password-based CI logins)
+- Confirm `IMAGE_NAME` in the Jenkinsfile actually starts with your Docker
+  Hub namespace — pushing to a namespace you don't own always 401s
 
-## CORS error in the browser console
+## Quality Gate fails but you can't tell why
 
-`CorsConfig` only allows the origin in `app.cors.allowed-origins`
-(default `http://localhost:3000`). If you're serving the frontend from a
-different port or host, set `CORS_ALLOWED_ORIGINS` accordingly when starting
-the backend.
+Open the SonarQube project dashboard (linked from the Jenkins build's
+SonarQube widget, if the plugin is installed) — the specific failed
+condition (e.g. "Coverage on New Code < 80%") is listed there, not in the
+Jenkins console output.
 
-## `mvn test` fails with Lombok-related compile errors
+## Build stuck at "Unit Test" forever
 
-Ensure your IDE has annotation processing enabled for Lombok, and that
-you're on JDK 21 exactly (`java -version`) — Lombok 1.18.x used by this
-Spring Boot parent version is validated against JDK 21.
-
-## Port already in use (3000 / 8080 / 3306)
-
-```bash
-# find and stop whatever is bound to the port, e.g. on 8080:
-lsof -i :8080        # macOS/Linux
-netstat -ano | findstr :8080   # Windows
-```
+Check for a hung Spring context in a test — most likely a `@SpringBootTest`
+someone added that's trying to reach a real database. This project's tests
+are deliberately Mockito-only / `@WebMvcTest` slices specifically to avoid
+this class of problem; keep new tests in that style.
 
 ## Next
 

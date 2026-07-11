@@ -1,49 +1,41 @@
-# Interview Questions (main branch — application fundamentals)
+# Interview Questions — Project 1: Enterprise CI Pipeline
 
-These cover the application layer only. DevOps/infra interview questions are
-added per project branch (CI, EKS, Helm, GitOps, ELK, Prometheus).
+## Jenkins
 
-## Spring Boot / Java
+1. What's the difference between declarative and scripted Jenkins
+   pipelines? Why does this repo use declarative?
+2. Explain what `disableConcurrentBuilds()` protects against in this
+   Jenkinsfile, and describe a failure mode it prevents.
+3. Why does the `Unit Test` stage have its own `post { always { junit ... } }`
+   block instead of one global `post` block at the pipeline level?
+4. What's the security reason for injecting Docker Hub credentials via
+   `credentials('dockerhub-credentials')` instead of hardcoding them, and
+   how does Jenkins prevent them from leaking into console logs?
 
-1. Why do the controllers in this codebase accept and return DTOs instead of
-   JPA entities directly?
-2. What does `@Transactional(readOnly = true)` buy you on the read methods,
-   and why does removing it break `getAllEmployees()` (hint: lazy-loaded
-   `Department`)?
-3. Explain the difference between `spring.jpa.hibernate.ddl-auto: update`
-   (dev) and `validate` (prod) — why is `update` unsafe in production?
-4. How does `GlobalExceptionHandler` avoid duplicating error-handling logic
-   across every controller?
-5. Why is `open-in-view` set to `false` in `application.yml`, and what bug
-   class does it prevent?
+## SonarQube
 
-## Testing
+5. Why is `waitForQualityGate` a separate stage from `SonarQube Analysis`
+   rather than one combined stage?
+6. What happens if the SonarQube webhook is never configured? Why doesn't
+   the pipeline just fail fast in that case?
+7. What's the difference between "overall code" and "new code" quality
+   gate conditions, and which one usually matters more for CI on a mature
+   codebase?
 
-6. Why do `EmployeeServiceTest` and friends use pure Mockito (`@Mock`,
-   `@InjectMocks`) instead of loading the full Spring context?
-7. What's the difference between the `@WebMvcTest` slice used in
-   `DepartmentControllerTest` and a full `@SpringBootTest`? When would you
-   need the latter?
-8. `createDepartment_whenCodeExists_throwsException` asserts
-   `verify(departmentRepository, never()).save(any())`. Why does this
-   verification matter beyond just asserting the thrown exception?
+## Docker
 
-## React
+8. Why does this pipeline use a different Dockerfile
+   (`backend-ci.Dockerfile`) than the one used for local development
+   (`backend.Dockerfile`)?
+9. Why is `docker login` done via `--password-stdin` instead of `-p`?
+10. What's the purpose of tagging the same image with both the build number
+    and `latest`? What's the risk of only ever pushing `latest`?
 
-9. Why does `apiClient.js` centralize error handling in an axios response
-   interceptor instead of each page catching raw axios errors?
-10. Walk through what happens in `EmployeeForm.js` when editing an existing
-    employee vs. creating a new one — how does one component serve both
-    cases?
-11. Why is department data fetched via `Promise.all` alongside the employee
-    fetch in edit mode, rather than sequentially?
+## General CI/CD
 
-## System design (applied to this app)
-
-12. This app has no authentication. If you had to add JWT-based auth with
-    minimal disruption, which layers would you touch, and how would you keep
-    the `GlobalExceptionHandler` pattern consistent for `401`/`403`
-    responses?
-13. The `Employee` → `Department` relationship is `@ManyToOne` with
-    `FetchType.LAZY`. What would break if you switched it to `EAGER`, and
-    under what circumstances would `EAGER` actually be the right call?
+11. Why does `Package Jar` use `-DskipTests` when tests already ran in a
+    prior stage? What's the difference between `-DskipTests` and
+    `-Dmaven.test.skip=true`?
+12. If you had to add a second microservice to this pipeline, would you
+    extend this single Jenkinsfile or create a second one? What factors
+    would drive that decision? (Hint: see how Project 3 answers this.)

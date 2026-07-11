@@ -1,48 +1,38 @@
-# Architecture (main branch)
+# Architecture — Project 1: Enterprise CI Pipeline
 
-The base application is a deliberately simple 3-tier system: **React → Spring
-Boot → MySQL**. No authentication, no message queues, no caching layer — the
-goal is to keep the application easy to reason about so that later project
-branches can layer DevOps tooling around it without fighting business-logic
-complexity.
+Full detail lives in [`/architecture`](../architecture/README.md) — this
+page is the short version.
 
-Full diagrams (component, class/module, request sequence) live in
-[`/diagrams/application-architecture.md`](../diagrams/application-architecture.md).
+The application architecture is unchanged from `main`
+([`/diagrams/application-architecture.md`](../diagrams/application-architecture.md)).
+What's added here sits entirely *around* the app:
 
-## Backend layering
-
-```
-controller/   → REST endpoints, request/response mapping, validation trigger
-service/      → business rules, orchestration, transaction boundaries
-service/impl/ → concrete implementations of the service interfaces
-repository/   → Spring Data JPA interfaces (no custom SQL needed yet)
-model/entity/ → JPA entities (Employee, Department, Project, ProjectStatus)
-dto/          → request/response contracts, decoupled from entities
-exception/    → ResourceNotFoundException + GlobalExceptionHandler (RFC-7807-style ApiError)
-config/       → CorsConfig (frontend origin allow-list)
+```mermaid
+flowchart LR
+    Dev[Developer] -->|git push| Repo[(Git Repository)]
+    Repo -->|webhook / poll| Jenkins[Jenkins Controller]
+    Jenkins -->|mvn test| Build[Build Agent]
+    Jenkins -->|mvn sonar:sonar| Sonar[(SonarQube)]
+    Sonar -->|quality gate webhook| Jenkins
+    Jenkins -->|docker build/push| Hub[(Docker Hub)]
 ```
 
-Controllers never touch entities directly — everything crosses the
-controller boundary as a DTO. This keeps the API contract stable even if the
-persistence model changes later (relevant once Terraform-managed RDS
-replaces the local MySQL container in Project 2).
+## Key design decisions
 
-## Frontend layering
-
-```
-api/          → one file per resource (employeeApi.js, departmentApi.js, ...),
-                all HTTP calls go through the shared apiClient.js axios instance
-components/   → reusable UI (Navbar, Footer, Loader, ErrorBanner, ConfirmDialog)
-pages/        → one screen per route (List + Form pair per module)
-styles/       → single App.css, no CSS framework dependency
-```
-
-## Why no authentication yet
-
-Adding auth now would obscure the DevOps lessons this repository exists to
-teach. Security concerns (secrets management, RBAC, network policy) are
-introduced progressively starting in Project 4 (GitOps + Trivy/OWASP
-scanning) rather than baked into the app itself.
+- **No app code changes.** The Jenkinsfile builds and tests exactly what's
+  in `backend/` — CI should validate the app, not shape it.
+- **Quality Gate can fail the build.** `waitForQualityGate abortPipeline:
+  true` means a coverage or duplication regression stops the pipeline
+  before an image is ever built, let alone pushed.
+- **The CI Docker image differs from the dev Docker image** — see
+  [`architecture/README.md`](../architecture/README.md#why-the-ci-dockerfile-differs-from-the-dev-one)
+  for why building the jar twice (once via Maven, again inside a
+  multi-stage Dockerfile) would be wasteful and risks testing a different
+  artifact than what ships.
+- **Credentials never live in the repo.** Docker Hub credentials come from
+  Jenkins' credential store (`dockerhub-credentials`); SonarQube auth comes
+  from the SonarQube server config in Jenkins, not a token in
+  `settings.xml`.
 
 ## Next
 

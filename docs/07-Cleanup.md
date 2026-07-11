@@ -1,36 +1,34 @@
-# Cleanup (main branch)
+# Cleanup — Project 1: Enterprise CI Pipeline
 
-## Docker Compose stack
+## Stop and remove local Jenkins
 
 ```bash
-docker compose -f docker/docker-compose.yml down
-# also remove the MySQL data volume:
-docker compose -f docker/docker-compose.yml down -v
+docker stop jenkins && docker rm jenkins
+docker volume rm jenkins_home   # only if you want to lose all job history/config
 ```
 
-## Standalone MySQL container (from setup-local-mysql.sh)
+## Stop and remove local SonarQube
 
 ```bash
-docker stop devops-mysql-standalone
-docker rm devops-mysql-standalone
+docker stop devops-sonarqube-local && docker rm devops-sonarqube-local
 ```
 
-## Build artifacts
+## Remove pushed Docker Hub images
+
+Docker Hub → your repository → Tags → delete the tags created while
+testing this project (build-number tags accumulate quickly).
+
+## Remove local build artifacts
 
 ```bash
-# backend
 rm -rf backend/target
-
-# frontend
-rm -rf frontend/node_modules frontend/build
 ```
 
-## Docker images built locally
+## Revoke tokens you created for this exercise
 
-```bash
-docker image prune -f
-docker rmi $(docker images 'enterprise-devops-learning-platform*' -q) 2>/dev/null || true
-```
+- SonarQube token (My Account → Security → Revoke)
+- Docker Hub access token (Account Settings → Security → Revoke), if you
+  created one solely for this learning exercise
 
 ## Next
 

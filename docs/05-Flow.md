@@ -1,51 +1,46 @@
-# Request Flow (main branch)
+# Pipeline Flow — Project 1: Enterprise CI Pipeline
 
-See the sequence diagram in
-[`/diagrams/application-architecture.md`](../diagrams/application-architecture.md)
-for the visual version of this flow (Employee creation example).
+Full diagrams: [`/architecture/pipeline-diagram.md`](../architecture/pipeline-diagram.md).
 
-## Read path — `GET /api/employees`
+## Stage-by-stage
 
-1. `EmployeeController.getAllEmployees()` receives the request
-2. Delegates to `EmployeeService.getAllEmployees()`
-3. `EmployeeServiceImpl` calls `EmployeeRepository.findAll()` (Spring Data JPA
-   generates the SQL)
-4. Each `Employee` entity is mapped to an `EmployeeDTO` (including resolving
-   `departmentName` from the lazy-loaded `Department` association, inside the
-   `@Transactional(readOnly = true)` boundary so the lazy load succeeds)
-5. Controller returns `200 OK` with the DTO list as JSON
+| Stage | Command | Fails the build if... |
+|---|---|---|
+| Checkout | `checkout scm` | Repo unreachable / bad credentials |
+| Maven Build | `mvn clean compile` | Code doesn't compile |
+| Unit Test | `mvn test` | Any JUnit/Mockito test fails |
+| SonarQube Analysis | `mvn sonar:sonar` | SonarQube server unreachable (analysis itself doesn't "fail" on code smells) |
+| Quality Gate | `waitForQualityGate abortPipeline: true` | Coverage/duplication/new-issue thresholds breached, or 10-minute timeout with no webhook response |
+| Parallel Stage | Jacoco publish + `mvn dependency:tree` | Either branch erroring |
+| Package Jar | `mvn package -DskipTests` | Packaging error (tests already ran, no need to re-run) |
+| Docker Build | `docker build -f docker/backend-ci.Dockerfile` | Missing jar, Dockerfile syntax error |
+| Push Docker Image | `docker push` (x2 tags) | Bad Docker Hub credentials, network failure |
 
-## Write path — `POST /api/employees`
+## Why `-DskipTests` on Package Jar
 
-1. `@Valid @RequestBody EmployeeDTO` triggers Bean Validation
-   (`@NotBlank`, `@Email`, `@PositiveOrZero`, etc.)
-2. If validation fails, `MethodArgumentNotValidException` is thrown before
-   the controller method body runs, and `GlobalExceptionHandler` converts it
-   into a `400` with a `fieldErrors` map the frontend renders under each field
-3. If validation passes, `EmployeeServiceImpl.createEmployee()`:
-   - Checks `existsByEmail()` to enforce uniqueness (a DB-level unique
-     constraint also exists as the last line of defense)
-   - Loads the referenced `Department` or throws `ResourceNotFoundException`
-   - Saves the new `Employee`, returns the mapped DTO
-4. Controller returns `201 Created`
+Tests already ran and were verified in the **Unit Test** stage. Re-running
+them during packaging would double the pipeline's total time for zero new
+information — `-DskipTests` skips test *execution* while still requiring
+test *code* to compile (unlike `-Dmaven.test.skip=true`, which skips both).
 
-## Error contract
+## Credential flow
 
-Every error response (404, 400, 500) follows the same `ApiError` shape:
+```mermaid
+sequenceDiagram
+    participant JF as Jenkinsfile
+    participant JC as Jenkins Credential Store
+    participant DH as Docker Hub
 
-```json
-{
-  "timestamp": "2026-07-11T10:15:30Z",
-  "status": 404,
-  "error": "Not Found",
-  "message": "Employee not found with id: 42",
-  "path": "/api/employees/42",
-  "fieldErrors": null
-}
+    JF->>JC: credentials('dockerhub-credentials')
+    JC-->>JF: DOCKERHUB_CREDENTIALS_USR / _PSW (masked in logs)
+    JF->>DH: docker login (password via stdin, never as a CLI arg)
+    DH-->>JF: login succeeded
+    JF->>DH: docker push image:tag
 ```
 
-The frontend's `apiClient.js` response interceptor unwraps `message` so
-every page can display errors with a single `<ErrorBanner message={...} />`.
+Passwords are piped via stdin (`echo "$PSW" | docker login ... --password-stdin`)
+rather than passed as a `-p` flag, which would leak into `ps` output and
+shell history on the agent.
 
 ## Next
 

@@ -1,0 +1,15 @@
+# Jenkins plugins required to run the root Jenkinsfile.
+# Install via Manage Jenkins > Plugins, or feed this file to `jenkins-plugin-cli`
+# if you're building a custom Jenkins controller image.
+
+git
+workflow-aggregator
+pipeline-stage-view
+sonar
+code-coverage-api
+junit
+docker-workflow
+credentials-binding
+timestamper
+ws-cleanup
+build-timeout
