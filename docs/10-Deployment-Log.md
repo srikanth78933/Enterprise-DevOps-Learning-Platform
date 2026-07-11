@@ -86,12 +86,54 @@ exercised against a real, empty database before. Changed to
 migration tool is introduced — see the comment in that file. Committed
 as `ee3ab07`.
 
+## 7. `scripts/*.sh` weren't executable
+
+With the app actually running, `Verify` failed on
+`./scripts/verify-deployment.sh: Permission denied`. Every script under
+`scripts/` was committed with mode `100644` instead of `100755` — none
+had ever had the executable bit set in git, likely from being
+authored/edited on Windows, where the concept doesn't really exist.
+Fixed via `git update-index --chmod=+x` on all nine scripts. Committed
+as `629d0e9`.
+
+## 8. NGINX Ingress Controller was never installed
+
+Rollout succeeded, both backend pods went `1/1 Running`, but
+`verify-deployment.sh` still failed: "Ingress load balancer address
+never became available." `kubectl get ns ingress-nginx` came back
+`NotFound` — `docs/03-Installation.md` step 4 (now step 4 after the EBS
+CSI driver insert) had never been run against this cluster, and `helm`
+itself wasn't even installed on the host used to run it. Installed Helm
+3.21.3 system-wide, then:
+
+```bash
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace
+```
+
+The AWS Network Load Balancer it provisions gets a hostname in the
+Kubernetes Service almost immediately, but the DNS record itself can
+take a minute or two to actually resolve — a `curl: Could not resolve
+host` right after install is expected, not a new problem; it cleared on
+its own. Confirmed working with `curl -H "Host: enterprise-devops.example.com"
+http://<lb-hostname>/api/health` → `{"status":"UP"}`.
+
+Note: installing the Ingress Controller is a one-time **cluster**-level
+setup step, not something the Jenkins pipeline itself needs — nothing in
+the `Jenkinsfile` calls `helm`. It only ended up on the Jenkins host
+because that's where temporary AWS credential access was available at
+the time; it could equally have been run from any machine with
+`kubectl`/`helm` pointed at the cluster.
+
 ## Net result
 
 A first-time real deploy touches far more than application code: host
 disk management, missing CLI tooling, a placeholder never swapped out,
-a cluster-level addon + IAM/IRSA setup, manual one-time secrets, and a
-config default nobody had tested end to end. None of steps 1–3 or 5–6
-should recur once fixed; step 4 (EBS CSI driver) is now documented as a
-proper prerequisite in `docs/03-Installation.md` for anyone else
-standing this up against a fresh cluster.
+two separate cluster-level one-time setup steps (EBS CSI driver, Ingress
+Controller), manual one-time secrets, a config default nobody had
+tested end to end, and a file-permission quirk from Windows authoring.
+None of steps 1–3, 5–7 should recur once fixed; steps 4 and 8 are now
+documented as proper prerequisites in `docs/03-Installation.md` for
+anyone else standing this up against a fresh cluster.

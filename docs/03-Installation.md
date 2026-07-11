@@ -81,6 +81,11 @@ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/late
 
 ## 4. Install the NGINX Ingress Controller (required for Ingress)
 
+Needs `helm` on whatever machine you run this from (`helm version` to
+check; see [helm.sh/docs/intro/install](https://helm.sh/docs/intro/install/)
+if it's missing — this is a one-time cluster setup step, not something
+the Jenkins pipeline itself runs):
+
 ```bash
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
@@ -94,6 +99,10 @@ address:
 ```bash
 kubectl get svc -n ingress-nginx ingress-nginx-controller -w
 ```
+
+The Service gets a hostname almost immediately, but its DNS record can
+take a minute or two to actually resolve — `curl: Could not resolve
+host` right after this step is expected, not a failure; retry shortly.
 
 ## 5. Create the real secrets (never commit these)
 
