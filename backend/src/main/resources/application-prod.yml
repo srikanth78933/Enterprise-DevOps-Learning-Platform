@@ -1,0 +1,11 @@
+spring:
+  jpa:
+    show-sql: false
+    hibernate:
+      # Schema is managed by migrations in production; never let Hibernate mutate it.
+      ddl-auto: validate
+
+logging:
+  level:
+    root: WARN
+    com.enterprise.devops: INFO

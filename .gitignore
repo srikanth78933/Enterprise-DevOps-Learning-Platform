@@ -1,0 +1,44 @@
+# Backend (Maven / Java)
+backend/target/
+*.class
+*.jar
+!backend/.mvn/wrapper/maven-wrapper.jar
+
+# Frontend (Node / React)
+frontend/node_modules/
+frontend/build/
+frontend/.env
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Terraform
+terraform/**/.terraform/
+terraform/**/*.tfstate
+terraform/**/*.tfstate.backup
+terraform/**/.terraform.lock.hcl
+terraform/**/*.tfvars
+!terraform/**/*.tfvars.example
+
+# Helm
+helm/**/charts/*.tgz
+
+# Secrets — never commit real values, only *.example templates
+*.env
+!.env.example
+!frontend/.env.example
+**/secrets/*.yaml
+!**/secrets/*.example.yaml
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db
