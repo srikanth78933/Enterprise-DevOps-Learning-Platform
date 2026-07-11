@@ -36,7 +36,7 @@ stepping on each other.
 │   ├── helm-upgrade-frontend.sh     Local equivalent of frontend/Jenkinsfile's deploy step
 │   ├── verify-backend.sh / verify-frontend.sh
 │   └── helm-uninstall.sh
-└── docs/                            01-Prerequisites through 09-Interview-Questions, scoped to this project
+└── docs/                            01-Prerequisites through 10-Deployment-Log, scoped to this project
 
 (removed: kubernetes/ raw manifests, root Jenkinsfile - both superseded
 above; terraform/ - the EKS cluster is provisioned and managed outside

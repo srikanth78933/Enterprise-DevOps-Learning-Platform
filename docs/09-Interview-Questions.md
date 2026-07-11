@@ -43,3 +43,8 @@
     problems does that create for auditability and "what's actually
     running in production right now" that Project 4's GitOps approach is
     about to solve?
+
+## Next
+
+Continue to [10-Deployment-Log.md](./10-Deployment-Log.md) for what
+actually happened getting both services deployed for real the first time.

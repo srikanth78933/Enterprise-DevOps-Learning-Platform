@@ -49,7 +49,20 @@ enterprise-devops --create-namespace --wait --timeout 5m`
 ## 5. Verify
 
 ```bash
-kubectl get pods,svc,hpa,ingress -n enterprise-devops
+kubectl get pods -n enterprise-devops -o wide
+kubectl get deployment,svc,hpa,ingress,pvc -n enterprise-devops
+helm list -n enterprise-devops
+```
+
+Expect: `backend` 2/2 `Running`, `frontend` 2/2 `Running`, `mysql` 1/1
+`Running`, `mysql-pvc` `Bound`, the `enterprise-app` release showing
+`STATUS: deployed` (not `failed` or `pending-upgrade`), and
+`enterprise-app-ingress` with a real `ADDRESS` (the NLB hostname — can
+take a couple minutes to appear on first install).
+
+Then confirm both services actually answer through that Ingress:
+
+```bash
 ./scripts/verify-backend.sh
 ./scripts/verify-frontend.sh
 ```
@@ -58,6 +71,18 @@ kubectl get pods,svc,hpa,ingress -n enterprise-devops
 
 Follow [`jenkins/README.md`](../jenkins/README.md) steps 1-11 (steps 7 and
 11 are new in this project — two jobs, not one).
+
+## 7. Verify after each pipeline runs
+
+Same checklist as step 5, run again after triggering
+`enterprise-backend-pipeline` and `enterprise-frontend-pipeline` — this is
+what actually confirms the split-pipeline model works: each pod's
+`RESTARTS`/`AGE` should reflect only the service that pipeline touched,
+`helm list` should show the release revision incremented by exactly one
+per run, and `helm get values enterprise-app -n enterprise-devops` should
+show both `backend.image.tag` and `frontend.image.tag` holding their own
+independent values (see `docs/04-Step-by-Step.md` steps 2-3 for the
+deliberate cross-check that neither pipeline clobbered the other's tag).
 
 ## Next
 
