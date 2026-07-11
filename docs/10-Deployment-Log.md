@@ -123,10 +123,29 @@ origin). Required a full pipeline re-run to take effect - an
 already-built, already-pushed image can't be patched in place, only
 rebuilt.
 
-Also needed, unrelated to the app itself: the Ingress hostname
-(`enterprise-devops.example.com`) isn't real public DNS, so browser
-access requires a local hosts-file entry pointing it at the Ingress
-Load Balancer's IP — see `docs/03-Installation.md` step 5.
+Also needed at the time, unrelated to the app itself: the Ingress
+hostname (`enterprise-devops.example.com`) wasn't real public DNS, so
+browser access required a local hosts-file entry pointing it at the
+Ingress Load Balancer's IP. Superseded by step 9 below - that workaround
+is no longer necessary.
+
+## 9. Removed the Ingress host restriction entirely
+
+The hosts-file requirement above was actually a symptom of a design
+choice worth reconsidering, not just a one-off inconvenience: the
+Ingress rule required `Host: enterprise-devops.example.com` specifically
+(a fake hostname with no real DNS), so *any* real access - a teammate's
+browser, a monitoring check, anything - needed the same local hack.
+
+Changed `helm/enterprise-app/templates/ingress.yaml` so `host:` is only
+included when `global.ingressHost` is actually set (now empty by
+default in `values.yaml`) - an omitted `host:` matches any Host header,
+so the raw Load Balancer address works directly in any browser with zero
+setup. `global.ingressHost` stays available for a real deployment with
+an owned domain (`values-prod.yaml.example` already demonstrated this
+use case). Also dropped `CORS_ALLOWED_ORIGINS`' dependency on that same
+hostname (now `"*"`, since the frontend's relative-path API calls are
+same-origin and don't need CORS at all - see step 8).
 
 ## Net result
 

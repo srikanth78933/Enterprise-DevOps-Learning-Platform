@@ -1,9 +1,3 @@
-# Overridden by the umbrella chart when installed as part of enterprise-app -
-# safe default here so `helm install backend ./charts/backend` also works
-# standalone (e.g. for chart development/testing).
-global:
-  ingressHost: enterprise-devops.example.com
-
 replicaCount: 2
 
 image:

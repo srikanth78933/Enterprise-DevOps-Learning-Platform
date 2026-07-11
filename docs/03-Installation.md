@@ -67,6 +67,15 @@ Then confirm both services actually answer through that Ingress:
 ./scripts/verify-frontend.sh
 ```
 
+To check it in an actual browser: `global.ingressHost` is empty by
+default (see `helm/enterprise-app/values.yaml`), so the Ingress matches
+any Host header — just open the `ADDRESS` from `kubectl get ingress`
+directly, e.g. `http://<address>/` for the frontend and
+`http://<address>/api/health` for the backend. No hosts-file entry or
+DNS setup needed. (If you've set `global.ingressHost` for a real domain —
+see `values-prod.yaml.example` — use that domain instead, pointed at the
+same address via a real DNS record.)
+
 ## 6. Set up the two Jenkins pipeline jobs
 
 Follow [`jenkins/README.md`](../jenkins/README.md) steps 1-11 (steps 7 and
