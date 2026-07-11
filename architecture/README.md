@@ -1,13 +1,23 @@
 # Architecture — Project 1: Enterprise CI Pipeline
 
 This project adds a Continuous Integration pipeline in front of the base
-application from `main`. No application code changes — the backend is
+application from `main`. No backend code changes — the backend is
 identical to `main`; only build/quality/packaging automation is new.
 
 ![Project 1 Architecture](./project-1-architecture.jpg)
 
 See [`pipeline-diagram.md`](./pipeline-diagram.md) for the full Mermaid
 flow diagram of every Jenkinsfile stage.
+
+## Why there's no frontend here
+
+This pipeline's whole job is CI for the backend: build, test, quality
+gate, package, publish to Nexus, build and push a Docker image. None of
+that touches the frontend, so `frontend/` source, `docker/frontend.Dockerfile`,
+and the `frontend` service in `docker-compose.yml` were removed from this
+branch entirely — local dev here is backend+mysql only.
+`project-03-cicd-helm-microservices` is where frontend and backend both
+get their own independent CI/CD pipelines.
 
 ## What's new vs. `main`
 

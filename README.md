@@ -4,9 +4,10 @@ Part of the [Enterprise DevOps Learning Platform](https://github.com/srikanth789
 This branch takes the base application from `main` and puts a
 production-style Jenkins CI pipeline in front of it, wired to real Jenkins/
 SonarQube/Nexus/Docker Hub infrastructure (see `jenkins/README.md` for the
-exact endpoints). **No application code changed** — every file under
-`backend/` and `frontend/` is identical to `main`; everything here is new
-automation.
+exact endpoints). **No backend code changed** — every file under
+`backend/` is identical to `main`; everything here is new automation.
+`frontend/` was removed from this branch entirely (backend-only CI
+pipeline) — see `architecture/README.md` for why.
 
 ```
 Git → Jenkins → Checkout → Maven Build → Unit Test → SonarQube → Quality Gate
@@ -59,7 +60,7 @@ Full walkthrough: [`docs/03-Installation.md`](docs/03-Installation.md) and
 ## Next branch
 
 `project-02-cd-eks` takes the image this pipeline pushes to Docker Hub and
-deploys it to a Terraform-provisioned AWS EKS cluster.
+deploys it to an existing AWS EKS cluster.
 
 ```bash
 git checkout project-02-cd-eks
