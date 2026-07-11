@@ -11,13 +11,75 @@ kubectl get nodes
 
 You should see your worker nodes in `Ready` state.
 
-## 2. Enable the Metrics Server (required for HPA)
+## 2. Install the EBS CSI driver (required for the MySQL PVC)
+
+`mysql-deployment.yaml`'s PVC needs a real volume provisioner. EKS doesn't
+install one by default, and the in-tree `kubernetes.io/aws-ebs` provisioner
+(what the `gp2` StorageClass names) is migrated to the CSI driver under the
+hood on modern EKS — so without it, the PVC sits in `Pending` forever with
+"waiting for external provisioner ebs.csi.aws.com" and nothing using it
+(MySQL, then the backend) can ever start.
+
+This needs an IAM role the driver assumes via IRSA, which needs the
+cluster's OIDC provider registered in IAM first — skip provider creation if
+you already have one:
+
+```bash
+CLUSTER_NAME=eks-cluster   # or your cluster's actual name
+REGION=eu-west-3           # or your cluster's actual region
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ISSUER=$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" \
+  --query "cluster.identity.oidc.issuer" --output text)
+ISSUER_HOST_PATH=${ISSUER#https://}
+
+# Skip this if `aws iam list-open-id-connect-providers` already shows one
+# for this cluster.
+THUMBPRINT=$(echo | openssl s_client -servername "${ISSUER_HOST_PATH%%/*}" \
+  -showcerts -connect "${ISSUER_HOST_PATH%%/*}:443" 2>/dev/null \
+  | openssl x509 -fingerprint -noout -sha1 | sed 's/sha1 Fingerprint=//I; s/://g')
+aws iam create-open-id-connect-provider \
+  --url "$ISSUER" --client-id-list sts.amazonaws.com \
+  --thumbprint-list "$THUMBPRINT"
+
+cat > /tmp/ebs-csi-trust-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Federated": "arn:aws:iam::${ACCOUNT_ID}:oidc-provider/${ISSUER_HOST_PATH}"},
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {"StringEquals": {
+      "${ISSUER_HOST_PATH}:sub": "system:serviceaccount:kube-system:ebs-csi-controller-sa",
+      "${ISSUER_HOST_PATH}:aud": "sts.amazonaws.com"
+    }}
+  }]
+}
+EOF
+
+aws iam create-role --role-name AmazonEKS_EBS_CSI_DriverRole \
+  --assume-role-policy-document file:///tmp/ebs-csi-trust-policy.json
+aws iam attach-role-policy --role-name AmazonEKS_EBS_CSI_DriverRole \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+
+aws eks create-addon --cluster-name "$CLUSTER_NAME" --region "$REGION" \
+  --addon-name aws-ebs-csi-driver \
+  --service-account-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/AmazonEKS_EBS_CSI_DriverRole"
+```
+
+Wait for it to become active before continuing:
+
+```bash
+aws eks describe-addon --cluster-name "$CLUSTER_NAME" --region "$REGION" \
+  --addon-name aws-ebs-csi-driver --query "addon.status"
+```
+
+## 3. Enable the Metrics Server (required for HPA)
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 ```
 
-## 3. Install the NGINX Ingress Controller (required for Ingress)
+## 4. Install the NGINX Ingress Controller (required for Ingress)
 
 ```bash
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
@@ -33,7 +95,7 @@ address:
 kubectl get svc -n ingress-nginx ingress-nginx-controller -w
 ```
 
-## 4. Create the real secrets (never commit these)
+## 5. Create the real secrets (never commit these)
 
 ```bash
 kubectl create namespace enterprise-devops --dry-run=client -o yaml | kubectl apply -f -
@@ -50,7 +112,7 @@ kubectl create secret generic mysql-secret -n enterprise-devops \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-## 5. Deploy the application
+## 6. Deploy the application
 
 Either manually:
 
@@ -61,7 +123,7 @@ Either manually:
 ...or extend your Project 1 Jenkins setup per [`jenkins/README.md`](../jenkins/README.md)
 (steps 8-10 are new) and trigger the pipeline job pointed at this branch.
 
-## 6. Verify
+## 7. Verify
 
 ```bash
 ./scripts/verify-deployment.sh

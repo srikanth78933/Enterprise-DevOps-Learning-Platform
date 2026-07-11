@@ -26,10 +26,18 @@ which EKS provides automatically unless it was explicitly removed).
 
 ## HPA shows `<unknown>` for CURRENT / TARGETS forever
 
-Metrics Server isn't installed. Re-run step 2 of
+Metrics Server isn't installed. Re-run step 3 of
 `docs/03-Installation.md`, then `kubectl top pods -n enterprise-devops` —
 if that also fails, Metrics Server itself isn't healthy
 (`kubectl get pods -n kube-system | grep metrics-server`).
+
+## `mysql-pvc` stuck `Pending` forever, mysql pod never schedules
+
+`kubectl describe pvc mysql-pvc -n enterprise-devops` shows "waiting for
+external provisioner ebs.csi.aws.com". The EBS CSI driver addon isn't
+installed on the cluster — run step 2 of `docs/03-Installation.md`. This
+blocks everything downstream: mysql never starts, so the backend never
+passes its readiness probe either, even once secrets exist.
 
 ## Ingress load balancer never gets an address
 

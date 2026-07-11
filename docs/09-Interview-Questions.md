@@ -5,8 +5,10 @@
 1. Why do worker nodes live in private subnets while the Ingress load
    balancer lives in public subnets? What's the actual attack-surface
    argument, not just "best practice says so"?
-2. What is an EKS cluster's OIDC provider used for, given this project
-   doesn't use IRSA yet?
+2. What is an EKS cluster's OIDC provider used for? The EBS CSI driver's
+   IAM role (`docs/03-Installation.md` step 2) is this project's only
+   current IRSA consumer — what would change if the backend app itself
+   needed to call an AWS API (e.g. S3) using IRSA instead of static keys?
 3. Why does `aws eks update-kubeconfig` alone not guarantee `kubectl`
    access — what's the separate authorization layer, and where does it
    live?
@@ -30,3 +32,8 @@
 8. If the `Verify` stage's `kubectl rollout status` times out, has the
    deployment actually failed? What state is the cluster in at that
    point, and what would you check first?
+
+## Next
+
+Continue to [10-Deployment-Log.md](./10-Deployment-Log.md) for what
+actually happened getting this deployed for real the first time.

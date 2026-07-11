@@ -26,7 +26,7 @@ Ingress, HorizontalPodAutoscaler, and VerticalPodAutoscaler.
 │   ├── configure-kubeconfig.sh      Point local kubectl at the existing cluster
 │   ├── deploy-to-eks.sh             Local equivalent of the Deploy stage
 │   └── verify-deployment.sh         Local equivalent of the Verify stage
-└── docs/                            01-Prerequisites through 09-Interview-Questions, scoped to this project
+└── docs/                            01-Prerequisites through 10-Deployment-Log, scoped to this project
 ```
 
 Note: `frontend/` isn't deployed by this branch — see
