@@ -8,8 +8,8 @@
 // the backend to an existing EKS cluster (provisioned and managed outside
 // this repo). See jenkins/README.md for the additional one-time setup (AWS
 // credentials, kubectl/aws CLI on the agent) this project requires on top
-// of project 1's. (Frontend build/deploy isn't part of this branch - see
-// architecture/README.md for why.)
+// of project 1's. (This branch is backend-only, frontend/ was removed
+// entirely - see architecture/README.md for why.)
 //
 // Wired to this deployment's actual infrastructure:
 //   - Docker Hub:   docker.io/devopstraining064

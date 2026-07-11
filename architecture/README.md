@@ -18,15 +18,15 @@ against stale modules would create a second, different cluster instead of
 managing the real one. `docs/01-Prerequisites.md` covers what access you
 need to the existing cluster instead.
 
-## Why there's no frontend deployment here
+## Why there's no frontend here
 
 Deploying both services to EKS at once — two Docker images, two
 Deployments, path-based Ingress routing between them — added complexity
 that wasn't the point of *this* project (learning the CD mechanics: build,
 push, `kubectl apply -k`, `kubectl set image`, rolling updates, HPA). The
-`frontend/` source and its local dev tooling (`docker-compose.yml`,
-`frontend.Dockerfile`) are untouched and still work for local full-stack
-development — this branch just doesn't build or deploy it to EKS.
+`frontend/` source itself, `docker/frontend.Dockerfile`, and the
+`frontend` service in `docker-compose.yml` were all removed from this
+branch — local dev here is backend+mysql only.
 `project-03-cicd-helm-microservices` is where frontend and backend both
 get proper, independent CI/CD treatment via Helm.
 

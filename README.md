@@ -29,8 +29,8 @@ Ingress, HorizontalPodAutoscaler, and VerticalPodAutoscaler.
 └── docs/                            01-Prerequisites through 10-Deployment-Log, scoped to this project
 ```
 
-Note: `frontend/` isn't deployed by this branch — see
-[`architecture/README.md`](architecture/README.md#why-theres-no-frontend-deployment-here)
+Note: `frontend/` was removed from this branch entirely (backend-only) —
+see [`architecture/README.md`](architecture/README.md#why-theres-no-frontend-here)
 for why.
 
 ## Quick start

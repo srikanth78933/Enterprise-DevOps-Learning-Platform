@@ -35,7 +35,7 @@ project doesn't own or manage them.)
 ## 4. Local cleanup
 
 ```bash
-rm -rf backend/target frontend/build frontend/node_modules
+rm -rf backend/target
 ```
 
 ## Next

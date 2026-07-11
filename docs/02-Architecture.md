@@ -13,8 +13,8 @@ provision or own the infrastructure underneath it.
 
 ## Application layer (unchanged code, new deployment target)
 
-Backend only — see `architecture/README.md` for why frontend isn't
-deployed on this branch (`frontend/` source is untouched for local dev).
+Backend only — `frontend/` source was removed from this branch entirely;
+see `architecture/README.md` for why.
 
 ```
 kubernetes/namespace.yaml           → enterprise-devops namespace
