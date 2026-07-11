@@ -16,8 +16,8 @@ if kubectl get ingress -A --no-headers 2>/dev/null | grep -q .; then
   echo "NGINX Ingress Controller, not Terraform - deleting the EKS cluster without first"
   echo "deleting the Ingress (and the ingress-nginx controller's Service) can leave an"
   echo "orphaned, still-billing ELB/NLB behind. Recommended:"
-  echo "    kubectl delete -f ${ROOT_DIR}/kubernetes/ingress.yaml"
-  echo "    helm uninstall ingress-nginx -n ingress-nginx   (if installed via Helm)"
+  echo "    helm uninstall enterprise-app -n enterprise-devops   (removes the app's Ingress)"
+  echo "    helm uninstall ingress-nginx -n ingress-nginx        (removes the controller itself)"
   read -p "Continue with terraform destroy anyway? [y/N] " confirm
   if [ "${confirm}" != "y" ] && [ "${confirm}" != "Y" ]; then
     echo "Aborted."

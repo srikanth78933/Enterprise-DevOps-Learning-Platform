@@ -1,44 +1,45 @@
-# Interview Questions — Project 2: CD to AWS EKS
+# Interview Questions — Project 3: CI/CD with Helm & Independent Pipelines
 
-## Terraform
+## Helm fundamentals
 
-1. Why are `vpc`, `iam`, and `eks` separate modules instead of one flat
-   `main.tf`? What's the reusability/blast-radius argument?
-2. What's stored in Terraform state, and why does `backend.tf` push for S3
-   + DynamoDB remote state instead of the local `terraform.tfstate` file
-   used by default?
-3. Explain what `create_before_destroy` on the node group's `lifecycle`
-   block protects against.
+1. What's the difference between a chart's `values.yaml` and a `-f
+   custom-values.yaml` overlay, in terms of precedence? Where does `--set`
+   fit in that order?
+2. Explain what `--reuse-values` actually does, mechanically. Why is
+   `--reuse-values` alone not equivalent to `helm upgrade` with no flags?
+3. Why does the umbrella chart's `values.yaml` set values under top-level
+   keys named exactly `frontend`, `backend`, `mysql`? What happens if you
+   rename the `backend/` directory under `charts/` to `api/` but forget to
+   rename the corresponding key in the parent's `values.yaml`?
+4. What is `helm template` for, and how does it differ from `helm install
+   --dry-run`?
 
-## AWS / EKS
+## This chart specifically
 
-4. Why do worker nodes live in private subnets while the Ingress load
-   balancer lives in public subnets? What's the actual attack-surface
-   argument, not just "best practice says so"?
-5. What is the OIDC provider created in `terraform/modules/eks/main.tf`
-   for, given this project doesn't use IRSA yet?
-6. Why does `aws eks update-kubeconfig` alone not guarantee `kubectl`
-   access — what's the separate authorization layer, and where does it
-   live?
+5. Why does `backend/templates/deployment.yaml` use `envFrom: secretRef`
+   pointing at `.Values.existingSecret` instead of the chart creating and
+   templating a `Secret` object itself?
+6. Why does `mysql`'s `_helpers.tpl` return a hardcoded name instead of
+   the conventional `{{ .Release.Name }}-<chart>` pattern? What capability
+   does the chart lose by doing this?
+7. Walk through exactly what Kubernetes objects change (and which don't)
+   when `backend/Jenkinsfile` runs `helm upgrade --set
+   backend.image.tag=42 --reuse-values`.
 
-## Kubernetes
+## Pipeline architecture
 
-7. Why does `mysql-deployment.yaml` use `strategy: Recreate` instead of the
-   default `RollingUpdate`?
-8. Walk through exactly what happens, step by step, when
-   `kubectl set image deployment/backend backend=...` runs against a
-   Deployment with 2 replicas and a readiness probe.
-9. What's the difference between what the HPA (`backend-hpa.yaml`) and the
-   VPA (`backend-vpa.yaml`) each control, and why is running both
-   simultaneously against the same Deployment risky without care (hint:
-   see the comment in `backend-vpa.yaml`)?
-10. Why does `ingress.yaml` route by path (`/api` vs `/`) rather than by
-    separate hostnames for frontend and backend?
+8. What's the actual argument for splitting one Jenkinsfile into
+   `backend/Jenkinsfile` and `frontend/Jenkinsfile`? What did the single
+   combined pipeline (Projects 1-2) cost you that this fixes?
+9. Both pipelines deploy to the same Helm release. What could go wrong if
+   they ran concurrently, and what (if anything) protects against it?
+10. If you had ten microservices instead of two, would you keep scaling
+    this "one Jenkinsfile per service, one shared umbrella chart" pattern?
+    What would start to hurt first?
 
-## CI/CD
+## Looking ahead
 
-11. Why does the Jenkinsfile call `kubectl apply -k` before `kubectl set
-    image` rather than doing everything in one `kubectl apply`?
-12. If the `Verify` stage's `kubectl rollout status` times out, has the
-    deployment actually failed? What state is the cluster in at that
-    point, and what would you check first?
+11. This project still has Jenkins calling `helm upgrade` directly. What
+    problems does that create for auditability and "what's actually
+    running in production right now" that Project 4's GitOps approach is
+    about to solve?

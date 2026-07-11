@@ -1,0 +1,23 @@
+replicaCount: 2
+
+image:
+  repository: yourdockerhubuser/enterprise-devops-frontend
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  port: 80
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70

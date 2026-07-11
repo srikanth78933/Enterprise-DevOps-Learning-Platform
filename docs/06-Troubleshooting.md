@@ -1,66 +1,54 @@
-# Troubleshooting — Project 2: CD to AWS EKS
+# Troubleshooting — Project 3: CI/CD with Helm & Independent Pipelines
 
-## `terraform apply` fails with `UnauthorizedOperation` or `AccessDenied`
+## `helm lint` fails with "chart metadata is missing these dependencies"
 
-Your AWS credentials don't have permission to create VPCs/IAM roles/EKS
-clusters. Confirm `aws sts get-caller-identity` returns the identity you
-expect, and that it has sufficient IAM permissions (see
-`docs/01-Prerequisites.md`).
+`Chart.yaml` in `helm/enterprise-app/` must explicitly declare `frontend`,
+`backend`, and `mysql` under `dependencies:` (even though they're local,
+unpacked chart directories under `charts/` that Helm loads automatically
+regardless). This is a lint-time check, not a runtime requirement — but
+keep the declaration anyway, it's genuinely useful documentation of what
+the umbrella chart is made of.
 
-## `aws eks update-kubeconfig` succeeds, but `kubectl get nodes` returns `Unauthorized`
+## `helm upgrade` resets the other service's image tag
 
-The IAM identity you're using isn't mapped to Kubernetes RBAC. By default,
-only the IAM identity that *created* the cluster (i.e., whoever ran
-`terraform apply`) gets implicit `system:masters` access. If Jenkins uses a
-different IAM user than the one you ran Terraform with locally, you must
-add it to the `aws-auth` ConfigMap:
+You (or a script) forgot `--reuse-values`. See `docs/05-Flow.md` — this is
+the single most common mistake when hand-running Helm commands during this
+project. Fix: `helm rollback enterprise-app <previous-revision>` to
+recover, then re-run with `--reuse-values`.
 
-```bash
-kubectl edit configmap aws-auth -n kube-system
-# add a new mapUsers or mapRoles entry for the Jenkins IAM identity
-```
+## `Error: INSTALLATION FAILED: ... backend-secret" not found`
 
-## Pods stuck in `Pending`
+The chart references `backend-secret`/`mysql-secret` by name
+(`existingSecret` in each subchart's values) but doesn't create them.
+Create them first — see `helm/enterprise-app/README.md`.
 
-```bash
-kubectl describe pod <pod-name> -n enterprise-devops
-```
+## `helm upgrade --wait` times out
 
-Usually one of: no node has enough allocatable CPU/memory for the
-`resources.requests` (check `kubectl top nodes` / `kubectl describe node`),
-or the `mysql-pvc` PersistentVolumeClaim never bound (check `kubectl get
-pvc -n enterprise-devops` — the default `gp2` StorageClass must exist,
-which EKS provides automatically unless it was explicitly removed).
+Same failure modes as Project 2's `kubectl rollout status` timing out
+(bad DB credentials, image pull errors, failing readiness probe) — check
+`kubectl describe pod` and `kubectl logs` for the specific pod. `--wait`
+just makes Helm itself block on the same rollout Project 2 waited on
+explicitly with `kubectl rollout status`.
 
-## HPA shows `<unknown>` for CURRENT / TARGETS forever
+## Two Jenkins jobs both try to deploy at once and one fails
 
-Metrics Server isn't installed. Re-run step 3 of
-`docs/03-Installation.md`, then `kubectl top pods -n enterprise-devops` —
-if that also fails, Metrics Server itself isn't healthy
-(`kubectl get pods -n kube-system | grep metrics-server`).
+`helm upgrade` on the same release from two concurrent invocations can
+race (Helm holds a per-release lock, so the second one usually just fails
+cleanly with "another operation is in progress" rather than corrupting
+anything). If your webhook triggers are firing both pipelines simultaneously
+for unrelated changes, that's usually a sign the webhook path filters
+(`backend/**` vs `frontend/**`) aren't actually scoped correctly — see
+`jenkins/README.md` step 7.
 
-## Ingress load balancer never gets an address
+## Ingress works for `/` but not `/api`, or vice versa
 
-`kubectl get ingress -n enterprise-devops` shows no `ADDRESS`. Confirm the
-NGINX Ingress Controller is actually installed and its Service is `type:
-LoadBalancer` (`kubectl get svc -n ingress-nginx`) — the Ingress resource
-itself does nothing without a controller watching it.
-
-## `terraform destroy` hangs or fails deleting the VPC
-
-Almost always an orphaned ELB/NLB created by a Kubernetes `Service` or
-`Ingress` that Terraform doesn't know about, holding a network interface in
-one of the subnets. Delete the Ingress and any `LoadBalancer`-type Services
-first (see `scripts/terraform-destroy.sh`, which checks for this
-automatically), then retry `terraform destroy`.
-
-## `kubectl set image` succeeds but pods never update
-
-Check `kubectl rollout status deployment/backend -n enterprise-devops` —
-if it's stuck, the new pod likely never passes its readiness probe. Check
-`kubectl logs deployment/backend -n enterprise-devops` for a startup
-crash (frequently: `DB_URL`/credentials mismatch between the `backend-secret`
-and what `mysql-secret` actually contains).
+Confirm both entries actually rendered:
+`helm template enterprise-app helm/enterprise-app | grep -A5 "kind: Ingress"`.
+A common mistake when hand-editing `helm/enterprise-app/templates/ingress.yaml`
+is putting the more specific path (`/api`) *after* the catch-all (`/`) —
+NGINX Ingress evaluates paths in the order Kubernetes returns them, and
+`pathType: Prefix` on `/` will happily also match `/api/employees` if it's
+evaluated first.
 
 ## Next
 

@@ -1,0 +1,44 @@
+# Overridden by the umbrella chart when installed as part of enterprise-app -
+# safe default here so `helm install backend ./charts/backend` also works
+# standalone (e.g. for chart development/testing).
+global:
+  ingressHost: enterprise-devops.example.com
+
+replicaCount: 2
+
+image:
+  repository: yourdockerhubuser/enterprise-devops-backend
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  port: 8080
+
+config:
+  springProfilesActive: prod
+  dbUrl: "jdbc:mysql://mysql:3306/enterprise_devops?useSSL=false&allowPublicKeyRetrieval=true"
+
+# Real credentials are never set here - create the secret imperatively
+# (see helm/enterprise-app/README.md) and reference it by name.
+existingSecret: backend-secret
+existingSecretUsernameKey: DB_USERNAME
+existingSecretPasswordKey: DB_PASSWORD
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 768Mi
+
+probes:
+  readinessPath: /actuator/health/readiness
+  livenessPath: /actuator/health/liveness
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80

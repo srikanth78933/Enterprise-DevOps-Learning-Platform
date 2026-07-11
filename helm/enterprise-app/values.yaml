@@ -1,0 +1,32 @@
+# Umbrella values - keys matching a subchart's name (frontend/backend/mysql)
+# override that subchart's own values.yaml at the same path. `global` is a
+# Helm-special key merged into every subchart's .Values.global automatically.
+
+global:
+  ingressHost: enterprise-devops.example.com
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: yourdockerhubuser/enterprise-devops-frontend
+    tag: latest
+
+backend:
+  replicaCount: 2
+  image:
+    repository: yourdockerhubuser/enterprise-devops-backend
+    tag: latest
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+
+mysql:
+  persistence:
+    enabled: true
+    size: 10Gi

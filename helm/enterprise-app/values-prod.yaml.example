@@ -1,0 +1,36 @@
+# Example production overlay. Apply on top of the defaults:
+#   helm upgrade --install enterprise-app helm/enterprise-app \
+#     -n enterprise-devops -f helm/enterprise-app/values-prod.yaml.example
+#
+# Not applied by default or by the Jenkinsfiles - copy to values-prod.yaml
+# (gitignored) and adjust for your real environment, or pass -f directly.
+
+global:
+  ingressHost: app.your-real-domain.com
+
+backend:
+  replicaCount: 3
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 10
+  resources:
+    requests:
+      cpu: 500m
+      memory: 768Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+frontend:
+  replicaCount: 3
+
+mysql:
+  persistence:
+    size: 50Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi

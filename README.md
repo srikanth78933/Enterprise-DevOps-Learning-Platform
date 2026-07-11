@@ -1,63 +1,64 @@
-# Project 2 — CD to AWS EKS
+# Project 3 — CI/CD with Helm & Independent Microservice Pipelines
 
 Part of the [Enterprise DevOps Learning Platform](https://github.com/srikanth78933/Enterprise-DevOps-Learning-Platform).
-This branch continues from `project-01-ci-pipeline` and deploys the application
-onto a real, Terraform-provisioned AWS EKS cluster. **No application code
-changed** — everything here is new infrastructure and deployment automation.
+This branch continues from `project-02-cd-eks`, replaces the raw
+Kubernetes manifests with a Helm umbrella chart, and splits the single
+Jenkinsfile into two fully independent pipelines. **No application code
+changed.**
 
 ```
-Git → Jenkins → Build → Test → Sonar → Docker → Push Image → Deploy to EKS → Verify
+Frontend Pipeline: Checkout -> Install & Test -> Build -> Docker Build -> Push -> Helm Upgrade -> Verify
+Backend  Pipeline: Checkout -> Maven Build -> Test -> Sonar -> Quality Gate -> Package -> Docker Build -> Push -> Helm Upgrade -> Verify
 ```
 
 ## What you'll learn
 
-AWS (VPC, IAM, EKS), Terraform modules, `kubectl`, Namespaces, ConfigMaps,
-Secrets, Deployments, Services, Ingress, HorizontalPodAutoscaler, and
-VerticalPodAutoscaler.
+Helm (charts, values precedence, templates), ConfigMaps/Secrets via Helm's
+`existingSecret` pattern, Ingress through a chart, HPA via chart values,
+and how to structure CI/CD so two services deploy independently without
+stepping on each other.
 
 ## What's new in this branch
 
 ```
-├── terraform/                       VPC + IAM + EKS, as reusable modules
-│   ├── modules/{vpc,iam,eks}/
-│   └── (root: main.tf, variables.tf, outputs.tf, backend.tf, ...)
-├── kubernetes/                      Namespace, Config, Secrets template, Deployments, HPA, VPA, Ingress
-├── docker/frontend-ci.Dockerfile    Packages the Jenkins-built frontend bundle
-├── Jenkinsfile                      Extended: Frontend Build, dual Docker Build/Push, Deploy to EKS, Verify
+├── helm/enterprise-app/             Umbrella chart: frontend + backend + mysql subcharts
+│   ├── Chart.yaml, values.yaml, values-prod.yaml.example
+│   ├── templates/ingress.yaml       Routes /api -> backend, / -> frontend
+│   └── charts/{frontend,backend,mysql}/
+├── backend/Jenkinsfile              Independent backend pipeline (was: root Jenkinsfile)
+├── frontend/Jenkinsfile             Independent frontend pipeline (new)
 ├── architecture/
-│   ├── aws-infrastructure.md        VPC/EKS topology diagram
-│   └── pipeline-diagram.md          Updated end-to-end pipeline diagram
+│   ├── helm-chart-structure.md      Chart layout + values precedence diagram
+│   └── pipeline-diagram.md          Both pipelines + why splitting them matters
 ├── scripts/
-│   ├── terraform-init-apply.sh      Provision the cluster without Jenkins
-│   ├── configure-kubeconfig.sh      Point local kubectl at the cluster
-│   ├── deploy-to-eks.sh             Local equivalent of the Deploy stage
-│   ├── verify-deployment.sh         Local equivalent of the Verify stage
-│   └── terraform-destroy.sh         Safe teardown (checks for orphaned load balancers first)
+│   ├── helm-install.sh              First-time install
+│   ├── helm-upgrade-backend.sh      Local equivalent of backend/Jenkinsfile's deploy step
+│   ├── helm-upgrade-frontend.sh     Local equivalent of frontend/Jenkinsfile's deploy step
+│   ├── verify-backend.sh / verify-frontend.sh
+│   └── helm-uninstall.sh
 └── docs/                            01-Prerequisites through 09-Interview-Questions, scoped to this project
+
+(removed: kubernetes/ raw manifests, root Jenkinsfile - both superseded above)
 ```
 
 ## Quick start
 
-1. `terraform/README.md` → provision the cluster
-2. `jenkins/README.md` → extend your Project 1 Jenkins setup with AWS
-   credentials and `kubectl`/`aws` CLI on the agent
-3. Point the Jenkins pipeline job at this branch and run it
+1. Already have the EKS cluster from Project 2? Skip to step 2. Otherwise:
+   `terraform/README.md` first.
+2. `helm/enterprise-app/README.md` → create secrets, install the chart once
+3. `jenkins/README.md` → set up two pipeline jobs (steps 7 and 11 are new
+   vs. Project 2)
+4. Push a backend-only or frontend-only change and watch only the relevant
+   pipeline run
 
 Full walkthrough: [`docs/03-Installation.md`](docs/03-Installation.md).
 
-## Cost warning
-
-This provisions real, billable AWS resources (EKS control plane, EC2 worker
-nodes, NAT Gateway, and — once you install an Ingress controller — a Load
-Balancer). Run `./scripts/terraform-destroy.sh` as soon as you're done —
-see [`docs/07-Cleanup.md`](docs/07-Cleanup.md) for the safe teardown order.
-
 ## Next branch
 
-`project-03-cicd-helm-microservices` replaces these raw manifests with a
-Helm umbrella chart and splits this Jenkinsfile into independent
-frontend/backend pipelines.
+`project-04-gitops-argocd` replaces Jenkins calling `helm upgrade`
+directly with Argo CD watching a Git repository, and adds Trivy, OWASP
+Dependency Check, and Docker Scout scanning to both pipelines.
 
 ```bash
-git checkout project-03-cicd-helm-microservices
+git checkout project-04-gitops-argocd
 ```

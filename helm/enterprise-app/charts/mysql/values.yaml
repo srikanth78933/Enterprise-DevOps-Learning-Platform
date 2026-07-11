@@ -1,0 +1,30 @@
+image:
+  repository: mysql
+  tag: "8.0"
+  pullPolicy: IfNotPresent
+
+database: enterprise_devops
+
+# Real credentials are never set here. Create the secret imperatively
+# (see helm/enterprise-app/README.md) and reference it by name -
+# `helm install/upgrade` never sees the actual password value.
+existingSecret: mysql-secret
+existingSecretUsernameKey: MYSQL_USER
+existingSecretPasswordKey: MYSQL_PASSWORD
+existingSecretRootPasswordKey: MYSQL_ROOT_PASSWORD
+
+persistence:
+  enabled: true
+  storageClassName: gp2
+  size: 10Gi
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+service:
+  port: 3306

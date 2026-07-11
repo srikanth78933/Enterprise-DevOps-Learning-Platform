@@ -1,0 +1,24 @@
+Enterprise DevOps Learning Platform deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Check status:
+  kubectl get pods,svc,hpa,ingress -n {{ .Release.Namespace }}
+
+{{- if .Values.ingress.enabled }}
+
+Once the Ingress load balancer has an address:
+  kubectl get ingress {{ .Release.Name }}-ingress -n {{ .Release.Namespace }}
+
+Test it (no real DNS for {{ .Values.global.ingressHost }}, use a Host header):
+  curl -H "Host: {{ .Values.global.ingressHost }}" http://<lb-address>/api/health
+  curl -H "Host: {{ .Values.global.ingressHost }}" http://<lb-address>/
+{{- end }}
+
+Upgrade just the backend after a new image is pushed:
+  helm upgrade {{ .Release.Name }} helm/enterprise-app -n {{ .Release.Namespace }} \
+    --reuse-values --set backend.image.tag=<new-tag>
+
+Upgrade just the frontend:
+  helm upgrade {{ .Release.Name }} helm/enterprise-app -n {{ .Release.Namespace }} \
+    --reuse-values --set frontend.image.tag=<new-tag>
+
+See helm/enterprise-app/README.md for secrets setup (required before first install).

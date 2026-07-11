@@ -1,33 +1,25 @@
-# Prerequisites — Project 2: CD to AWS EKS
+# Prerequisites — Project 3: CI/CD with Helm & Independent Pipelines
 
-Builds on Project 1's prerequisites (Jenkins, SonarQube, Docker Hub — see
-`docs/01-Prerequisites.md` on the `project-01-ci-pipeline` branch).
+Builds on Project 2's prerequisites (AWS CLI, kubectl, Terraform, an EKS
+cluster — see `docs/01-Prerequisites.md` on `project-02-cd-eks`).
 Additionally:
 
 | Tool | Minimum Version | Check |
 |---|---|---|
-| AWS CLI | v2 | `aws --version` |
-| kubectl | 1.28+ | `kubectl version --client` |
-| Terraform | 1.7+ | `terraform -version` |
-| An AWS account with billing enabled | — | — |
+| Helm | 3.14+ | `helm version` |
 
-## Accounts and access you need before starting
+## What you need already in place
 
-1. **AWS account** with permissions to create VPCs, IAM roles, and EKS
-   clusters (an `AdministratorAccess` policy is simplest for learning; a
-   real org would scope this down significantly).
-2. **AWS credentials configured locally**: `aws configure` (access key +
-   secret + default region), or an assumed role via `aws sso login` /
-   `aws sts assume-role`.
-3. Everything from Project 1: Docker Hub account, Jenkins, SonarQube.
+- A running EKS cluster (from Project 2's `terraform apply`, or freshly
+  provisioned — this project doesn't change `terraform/` at all)
+- The NGINX Ingress Controller and Metrics Server installed (Project 2,
+  steps 3-4 of `docs/03-Installation.md`)
+- Docker Hub, Jenkins, SonarQube from Projects 1-2
 
-## Cost awareness
+## New this project
 
-Running through this project's `terraform apply` → `terraform destroy`
-cycle a few times while learning costs a few dollars (EKS control plane
-$0.10/hr, 2× t3.medium nodes, one NAT Gateway, briefly a Load Balancer).
-Not free-tier eligible. Set a AWS Budget alert before starting if you're
-cost-sensitive.
+Two Jenkins pipeline jobs instead of one — see
+[`jenkins/README.md`](../jenkins/README.md) step 7.
 
 ## Next
 

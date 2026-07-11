@@ -1,0 +1,24 @@
+apiVersion: v2
+name: enterprise-app
+description: >-
+  Umbrella chart for the Enterprise DevOps Learning Platform - bundles the
+  frontend, backend, and mysql subcharts into one installable release.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+# file:// dependencies point at chart source directories we own, not a
+# remote chart repository - `helm dependency update` still works with
+# these (it copies each into charts/<name>-<version>.tgz), but isn't
+# required for `helm install`/`helm template` to find them, since the
+# unpacked directories already exist directly under charts/.
+dependencies:
+  - name: frontend
+    version: "1.0.0"
+    repository: "file://charts/frontend"
+  - name: backend
+    version: "1.0.0"
+    repository: "file://charts/backend"
+  - name: mysql
+    version: "1.0.0"
+    repository: "file://charts/mysql"

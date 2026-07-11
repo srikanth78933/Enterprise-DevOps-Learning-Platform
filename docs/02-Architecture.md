@@ -1,40 +1,39 @@
-# Architecture — Project 2: CD to AWS EKS
+# Architecture — Project 3: CI/CD with Helm & Independent Pipelines
 
 Full detail lives in [`/architecture`](../architecture/README.md) — this
 page is the short version.
 
-## Infrastructure layers
+## Helm chart layers
 
 ```
-terraform/modules/vpc/   → VPC, public/private subnets, IGW, NAT Gateway
-terraform/modules/iam/   → EKS cluster role, node group role
-terraform/modules/eks/   → EKS control plane, managed node group, OIDC provider
-terraform/main.tf        → wires the three modules together
+helm/enterprise-app/               → umbrella chart, owns the Ingress
+helm/enterprise-app/charts/mysql/  → single-replica MySQL + PVC
+helm/enterprise-app/charts/backend/  → Deployment, Service, ConfigMap, HPA
+helm/enterprise-app/charts/frontend/ → Deployment, Service, optional HPA
 ```
 
-See [`architecture/aws-infrastructure.md`](../architecture/aws-infrastructure.md)
-for the full topology diagram.
+See [`architecture/helm-chart-structure.md`](../architecture/helm-chart-structure.md)
+for the values-precedence diagram and why subchart resource names are
+fixed rather than release-prefixed.
 
-## Application layer (unchanged code, new deployment target)
+## Pipeline layers (now two, not one)
 
 ```
-kubernetes/namespace.yaml           → enterprise-devops namespace
-kubernetes/configmap.yaml           → non-secret backend + MySQL config
-kubernetes/secret.example.yaml      → template only, real secrets created imperatively
-kubernetes/mysql-deployment.yaml    → single-replica MySQL + PVC
-kubernetes/backend-deployment.yaml  → 2 replicas, Actuator readiness/liveness probes
-kubernetes/backend-hpa.yaml         → scales 2-6 replicas on CPU/memory
-kubernetes/backend-vpa.yaml         → recommendation-only, optional
-kubernetes/frontend-deployment.yaml → 2 replicas, NGINX-served static build
-kubernetes/ingress.yaml             → routes /api to backend, / to frontend
+backend/Jenkinsfile   → Maven/JUnit/SonarQube/Docker/Helm --set backend.image.tag
+frontend/Jenkinsfile  → npm/Docker/Helm --set frontend.image.tag
 ```
 
-## Pipeline layer
+See [`architecture/pipeline-diagram.md`](../architecture/pipeline-diagram.md)
+for the full flow and the `--reuse-values` mechanism that keeps the two
+pipelines from clobbering each other's last deployed image tag.
 
-The Jenkinsfile from Project 1 gains five stages: **Frontend Build**,
-**Docker Build** (now parallel, backend + frontend), **Push Docker Images**
-(x2), **Deploy to EKS**, **Verify**. Full diagram:
-[`architecture/pipeline-diagram.md`](../architecture/pipeline-diagram.md).
+## What didn't change
+
+- The AWS infrastructure (`terraform/`) — same VPC, same EKS cluster
+- The application code (`backend/src`, `frontend/src`) — identical to
+  Project 2
+- The Docker images themselves (`docker/backend-ci.Dockerfile`,
+  `docker/frontend-ci.Dockerfile`)
 
 ## Next
 

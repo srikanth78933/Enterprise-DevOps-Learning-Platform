@@ -1,63 +1,66 @@
-# Step-by-Step Walkthrough — Project 2: CD to AWS EKS
+# Step-by-Step Walkthrough — Project 3: CI/CD with Helm & Independent Pipelines
 
-## 1. Confirm the baseline deploy works
+## 1. Confirm the baseline install works
 
-After following `docs/03-Installation.md` end to end, confirm all pods are
-healthy:
-
-```bash
-kubectl get pods -n enterprise-devops
-```
-
-Expect: 1 `mysql-*` pod, 2 `backend-*` pods, 2 `frontend-*` pods, all
-`Running` and `1/1 Ready`.
-
-## 2. Exercise the app through the Ingress
-
-Using the load balancer hostname from step 3 of Installation, open
-`http://<lb-hostname>/` with a browser plugin or `curl -H "Host: ..."` (real
-DNS isn't configured for the placeholder `enterprise-devops.example.com`
-host used in `ingress.yaml`) and walk through the same CRUD flow as
-`main`'s `docs/04-Step-by-Step.md` — create a department, an employee, a
-project.
-
-## 3. Watch the HPA under load
+After `docs/03-Installation.md`, confirm:
 
 ```bash
-kubectl get hpa -n enterprise-devops -w
+helm list -n enterprise-devops
+helm get values enterprise-app -n enterprise-devops
 ```
 
-In another terminal, generate load against the backend:
+`helm get values` should show only what you explicitly `--set` or `-f`
+overrode — never a real password (secrets are referenced by name, not
+templated).
+
+## 2. Trigger only the backend pipeline
+
+Make a trivial backend change, push it, run `enterprise-backend-pipeline`
+in Jenkins. Watch the **Helm Upgrade** stage — it runs `--set
+backend.image.tag=<build>` only. Confirm the frontend Deployment's image
+tag is untouched:
 
 ```bash
-kubectl run load-generator --image=busybox --restart=Never -n enterprise-devops -- \
-  /bin/sh -c "while true; do wget -q -O- http://backend:8080/api/employees; done"
+kubectl get deployment frontend -n enterprise-devops -o jsonpath='{.spec.template.spec.containers[0].image}'
 ```
 
-Watch `CURRENT` CPU climb past the 70% target and `REPLICAS` scale up
-toward 6. Clean up afterward: `kubectl delete pod load-generator -n enterprise-devops`.
+## 3. Trigger only the frontend pipeline
 
-## 4. Trigger a real deploy through Jenkins
+Same idea, opposite direction — make a trivial frontend change, run
+`enterprise-frontend-pipeline`, and confirm the backend's image tag didn't
+move.
 
-Push a trivial backend change (as in Project 1's walkthrough) and let the
-full pipeline run. Watch the **Deploy to EKS** and **Verify** stages in the
-Jenkins console — you should see the rolling update happen with zero
-downtime (old pods stay serving traffic until new ones pass their
-readiness probe).
+## 4. Break `--reuse-values` on purpose, then fix it
 
-## 5. Confirm zero-downtime deploys
-
-While a deploy is in progress (`kubectl rollout status deployment/backend
--n enterprise-devops`), hit the health endpoint in a tight loop from
-another terminal:
+Temporarily edit `scripts/helm-upgrade-backend.sh` to remove
+`--reuse-values` and run it. Then check:
 
 ```bash
-while true; do curl -s -o /dev/null -w "%{http_code}\n" \
-  -H "Host: enterprise-devops.example.com" http://<lb-hostname>/api/health; sleep 0.5; done
+kubectl get deployment frontend -n enterprise-devops -o jsonpath='{.spec.template.spec.containers[0].image}'
 ```
 
-You should see a continuous stream of `200`s with no gaps, even as pods
-roll.
+Without `--reuse-values`, the frontend image tag resets to whatever
+`helm/enterprise-app/values.yaml` says by default (`latest`) — a real
+regression this flag exists specifically to prevent. Revert the script
+change afterward.
+
+## 5. Try a values overlay
+
+```bash
+helm upgrade enterprise-app helm/enterprise-app -n enterprise-devops \
+  --reuse-values -f helm/enterprise-app/values-prod.yaml.example --dry-run --debug
+```
+
+`--dry-run --debug` renders and validates without actually applying —
+inspect the output and see exactly which values changed versus the
+current release.
+
+## 6. Roll back
+
+```bash
+helm history enterprise-app -n enterprise-devops
+helm rollback enterprise-app <revision-number> -n enterprise-devops
+```
 
 ## Next
 

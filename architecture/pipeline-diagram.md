@@ -1,78 +1,66 @@
-# CI/CD Pipeline Diagram — Project 2
+# CI/CD Pipeline Diagrams — Project 3
 
-Extends Project 1's pipeline (Checkout through Package Jar are unchanged)
-with a frontend build, a second Docker image, and a real deployment to EKS.
+Two fully independent pipelines now — `backend/Jenkinsfile` and
+`frontend/Jenkinsfile` — replacing the single root `Jenkinsfile` from
+Projects 1-2. Each can build, test, and deploy without waiting on, or
+being blocked by, the other.
 
 ```mermaid
 flowchart TD
-    A[Git push] --> B[Checkout]
-    B --> C[Maven Build]
-    C --> D[Unit Test]
-    D --> E[SonarQube Analysis]
-    E --> F{Quality Gate}
-    F -- fail --> X[Pipeline aborted]
-    F -- pass --> G[Parallel Stage]
-
-    subgraph G[Parallel Stage]
-        direction LR
-        G1[Publish Coverage Report]
-        G2[Dependency Tree Audit]
-    end
-
-    G --> H[Package Jar]
-    H --> I[Frontend Build<br/>npm ci / test / build]
-    I --> J[Docker Build]
-
-    subgraph J[Docker Build]
-        direction LR
-        J1[Backend Image]
-        J2[Frontend Image]
-    end
-
-    J --> K[Push Docker Images<br/>backend + frontend, x2 tags each]
-    K --> L[Deploy to EKS]
-    L --> M[Verify]
-    M --> N[Pipeline success]
-
-    subgraph L[Deploy to EKS]
+    subgraph BE["backend/Jenkinsfile"]
         direction TB
-        L1[aws eks update-kubeconfig]
-        L2[kubectl apply -k kubernetes/]
-        L3[kubectl set image backend + frontend]
-        L1 --> L2 --> L3
+        B1[Checkout] --> B2[Maven Build] --> B3[Unit Test] --> B4[SonarQube]
+        B4 --> B5{Quality Gate}
+        B5 -- pass --> B6[Parallel Stage] --> B7[Package Jar]
+        B7 --> B8[Docker Build] --> B9[Push Image]
+        B9 --> B10["Helm Upgrade<br/>--set backend.image.tag"]
+        B10 --> B11[Verify backend]
     end
 
-    subgraph M[Verify]
+    subgraph FE["frontend/Jenkinsfile"]
         direction TB
-        M1[kubectl rollout status backend]
-        M2[kubectl rollout status frontend]
-        M3[scripts/verify-deployment.sh<br/>curl through the Ingress]
-        M1 --> M2 --> M3
+        F1[Checkout] --> F2["Install & Test<br/>npm ci / test"] --> F3["Build<br/>npm run build"]
+        F3 --> F4[Docker Build] --> F5[Push Image]
+        F5 --> F6["Helm Upgrade<br/>--set frontend.image.tag"]
+        F6 --> F7[Verify frontend]
     end
+
+    B10 -.->|"same Helm release,\ndifferent --set key"| F6
 ```
 
-## Deploy stage detail
+## Why splitting pipelines matters (the actual lesson)
+
+In Project 2's single Jenkinsfile, a frontend-only CSS tweak still had to
+wait for the *entire* backend build/test/SonarQube/quality-gate chain
+before anything deployed — and a red backend Quality Gate blocked an
+unrelated frontend fix from shipping. Splitting into two pipelines, each
+touching only its own Helm values key via `--reuse-values`, means:
+
+- A frontend change deploys in the time it takes to `npm test` + build a
+  static bundle — no Java toolchain, no SonarQube wait.
+- A failing backend Quality Gate never blocks a frontend release, and
+  vice versa.
+- Each pipeline's blast radius is exactly one Helm value
+  (`backend.image.tag` or `frontend.image.tag`) — `--reuse-values` is what
+  guarantees pipeline A never clobbers pipeline B's last successful value.
+
+## Helm release lifecycle across both pipelines
 
 ```mermaid
 sequenceDiagram
-    participant J as Jenkins
-    participant AWS as AWS STS/EKS
-    participant K8s as EKS API Server
-    participant DH as Docker Hub
+    participant BEJ as backend/Jenkinsfile
+    participant FEJ as frontend/Jenkinsfile
+    participant Helm as Helm / EKS
 
-    J->>AWS: aws eks update-kubeconfig
-    AWS-->>J: kubeconfig with cluster endpoint + CA cert
-    J->>K8s: kubectl apply -k kubernetes/ (baseline: namespace, configmap, PVC, services, HPA, ingress)
-    K8s-->>J: resources created/unchanged
-    J->>K8s: kubectl set image deployment/backend backend=<image>:<build-tag>
-    J->>K8s: kubectl set image deployment/frontend frontend=<image>:<build-tag>
-    K8s->>DH: pull new image (rolling update, one pod at a time)
-    K8s-->>J: rollout status: successfully rolled out
-    J->>J: scripts/verify-deployment.sh (curl /actuator/health through Ingress)
+    Note over BEJ,FEJ: Both target the same release: "enterprise-app"
+
+    BEJ->>Helm: helm upgrade --install enterprise-app ... --reuse-values --set backend.image.tag=41
+    Helm-->>BEJ: backend.image.tag=41, frontend.image.tag=<unchanged>
+    Note right of Helm: Only the backend Deployment rolls
+
+    FEJ->>Helm: helm upgrade --install enterprise-app ... --reuse-values --set frontend.image.tag=17
+    Helm-->>FEJ: frontend.image.tag=17, backend.image.tag=41 (preserved)
+    Note right of Helm: Only the frontend Deployment rolls
 ```
 
-Why `kubectl apply -k` runs *before* `kubectl set image`: the baseline
-apply is what actually creates the namespace/configmap/services/HPA/PVC
-if they don't already exist (first deploy) or reconciles drift (later
-deploys); `set image` only ever touches the container image field on an
-existing Deployment, so it must run second.
+Full Helm chart structure: [`helm-chart-structure.md`](./helm-chart-structure.md).
