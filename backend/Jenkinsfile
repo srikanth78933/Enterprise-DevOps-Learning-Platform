@@ -9,6 +9,10 @@
 // independently of frontend/Jenkinsfile - the point of splitting them.
 // See jenkins/README.md for one-time setup (unchanged from Project 2, plus
 // `helm` now required on the agent).
+//
+// Wired to this deployment's actual infrastructure:
+//   - Docker Hub:   docker.io/devopstraining064
+//   - EKS cluster:  eks-cluster (eu-west-3)
 
 pipeline {
     agent any
@@ -27,17 +31,16 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
-        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
 
         SONARQUBE_ENV    = 'sonarqube-server'
-        AWS_REGION       = 'us-east-1'
-        EKS_CLUSTER_NAME = 'enterprise-devops-dev-eks'
+        AWS_REGION       = 'eu-west-3'
+        EKS_CLUSTER_NAME = 'eks-cluster'
         K8S_NAMESPACE    = 'enterprise-devops'
         HELM_RELEASE     = 'enterprise-app'
 
-        BACKEND_IMAGE = 'yourdockerhubuser/enterprise-devops-backend'
-        IMAGE_TAG     = "${env.BUILD_NUMBER}"
+        BACKEND_IMAGE = 'devopstraining064/enterprise-devops-backend'
     }
 
     stages {
@@ -51,6 +54,17 @@ pipeline {
         stage('Maven Build') {
             steps {
                 dir('backend') {
+                    script {
+                        // IMAGE_TAG is this pipeline's own pom.xml version plus its own
+                        // build number, e.g. 1.0.0-17 - independent of whatever tag
+                        // frontend/Jenkinsfile last produced, since these two pipelines
+                        // now run and version themselves completely separately.
+                        def devVersion = sh(
+                            script: "mvn -B -ntp -q -DforceStdout help:evaluate -Dexpression=project.version",
+                            returnStdout: true
+                        ).trim()
+                        env.IMAGE_TAG = "${devVersion.replace('-SNAPSHOT', '')}-${env.BUILD_NUMBER}"
+                    }
                     sh 'mvn -B -ntp clean compile'
                 }
             }

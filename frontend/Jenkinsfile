@@ -6,6 +6,10 @@
 // This pipeline only ever touches the `frontend` values of the
 // enterprise-app Helm release (--reuse-values), so it can run and deploy
 // completely independently of backend/Jenkinsfile.
+//
+// Wired to this deployment's actual infrastructure:
+//   - Docker Hub:   docker.io/devopstraining064
+//   - EKS cluster:  eks-cluster (eu-west-3)
 
 pipeline {
     agent any
@@ -19,16 +23,15 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
-        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
 
-        AWS_REGION       = 'us-east-1'
-        EKS_CLUSTER_NAME = 'enterprise-devops-dev-eks'
+        AWS_REGION       = 'eu-west-3'
+        EKS_CLUSTER_NAME = 'eks-cluster'
         K8S_NAMESPACE    = 'enterprise-devops'
         HELM_RELEASE     = 'enterprise-app'
 
-        FRONTEND_IMAGE = 'yourdockerhubuser/enterprise-devops-frontend'
-        IMAGE_TAG      = "${env.BUILD_NUMBER}"
+        FRONTEND_IMAGE = 'devopstraining064/enterprise-devops-frontend'
     }
 
     stages {
@@ -44,6 +47,17 @@ pipeline {
                 dir('frontend') {
                     sh 'npm ci'
                     sh 'CI=true npm test'
+                    script {
+                        // IMAGE_TAG is this pipeline's own package.json version plus
+                        // its own build number, e.g. 1.0.0-9 - independent of whatever
+                        // tag backend/Jenkinsfile last produced, since these two
+                        // pipelines now run and version themselves completely separately.
+                        def pkgVersion = sh(
+                            script: "node -p \"require('./package.json').version\"",
+                            returnStdout: true
+                        ).trim()
+                        env.IMAGE_TAG = "${pkgVersion}-${env.BUILD_NUMBER}"
+                    }
                 }
             }
         }

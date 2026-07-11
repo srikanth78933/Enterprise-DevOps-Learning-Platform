@@ -1,8 +1,9 @@
 # Installation — Project 3: CI/CD with Helm & Independent Pipelines
 
-Assumes you already have a running EKS cluster with the NGINX Ingress
-Controller and Metrics Server installed (Project 2). If not, do that
-first — nothing in `terraform/` changed.
+Assumes you already have a running EKS cluster with the EBS CSI driver,
+NGINX Ingress Controller, and Metrics Server installed — steps 1-4 of
+`project-02-cd-eks`'s `docs/03-Installation.md`. If not, do that first;
+this project doesn't provision or change any of that infrastructure.
 
 ## 1. Install Helm locally (if you haven't already)
 

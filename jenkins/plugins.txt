@@ -1,4 +1,4 @@
-# Jenkins plugins required to run the root Jenkinsfile.
+# Jenkins plugins required to run backend/Jenkinsfile and frontend/Jenkinsfile.
 # Install via Manage Jenkins > Plugins, or feed this file to `jenkins-plugin-cli`
 # if you're building a custom Jenkins controller image.
 

@@ -38,13 +38,16 @@ stepping on each other.
 │   └── helm-uninstall.sh
 └── docs/                            01-Prerequisites through 09-Interview-Questions, scoped to this project
 
-(removed: kubernetes/ raw manifests, root Jenkinsfile - both superseded above)
+(removed: kubernetes/ raw manifests, root Jenkinsfile - both superseded
+above; terraform/ - the EKS cluster is provisioned and managed outside
+this repo, same as Project 2)
 ```
 
 ## Quick start
 
-1. Already have the EKS cluster from Project 2? Skip to step 2. Otherwise:
-   `terraform/README.md` first.
+1. Confirm you have `kubectl`/`helm`/`aws` CLI access to the existing EKS
+   cluster (see `docs/01-Prerequisites.md`) — this project doesn't
+   provision infrastructure, same as Project 2.
 2. `helm/enterprise-app/README.md` → create secrets, install the chart once
 3. `jenkins/README.md` → set up two pipeline jobs (steps 7 and 11 are new
    vs. Project 2)

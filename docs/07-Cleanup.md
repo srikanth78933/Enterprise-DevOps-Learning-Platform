@@ -1,6 +1,8 @@
 # Cleanup — Project 3: CI/CD with Helm & Independent Pipelines
 
-Order matters — same reasoning as Project 2, now via Helm.
+Order matters — same reasoning as Project 2, now via Helm. The cluster
+itself is managed outside this repo, so cleanup here only covers what
+this project created on it (same as Project 2).
 
 ## 1. Uninstall the Helm release (removes the app's Ingress too)
 
@@ -24,13 +26,7 @@ kubectl delete secret backend-secret mysql-secret -n enterprise-devops
 kubectl delete pvc mysql-pvc -n enterprise-devops
 ```
 
-## 4. Destroy the AWS infrastructure
-
-```bash
-./scripts/terraform-destroy.sh
-```
-
-## 5. Local cleanup
+## 4. Local cleanup
 
 ```bash
 rm -rf backend/target frontend/build frontend/node_modules

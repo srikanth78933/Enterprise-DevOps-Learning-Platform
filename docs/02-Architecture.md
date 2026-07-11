@@ -29,7 +29,8 @@ pipelines from clobbering each other's last deployed image tag.
 
 ## What didn't change
 
-- The AWS infrastructure (`terraform/`) — same VPC, same EKS cluster
+- The AWS infrastructure — same VPC, same EKS cluster, still provisioned
+  and managed outside this repo (no `terraform/` here, same as Project 2)
 - The application code (`backend/src`, `frontend/src`) — identical to
   Project 2
 - The Docker images themselves (`docker/backend-ci.Dockerfile`,

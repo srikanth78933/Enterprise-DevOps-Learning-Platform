@@ -59,11 +59,11 @@ helm install enterprise-app helm/enterprise-app -n enterprise-devops --create-na
 ```bash
 # after backend/Jenkinsfile builds and pushes a new backend image:
 helm upgrade enterprise-app helm/enterprise-app -n enterprise-devops \
-  --reuse-values --set backend.image.tag=<build-number>
+  --reuse-values --set backend.image.tag=<pom-version>-<build-number>
 
 # after frontend/Jenkinsfile builds and pushes a new frontend image:
 helm upgrade enterprise-app helm/enterprise-app -n enterprise-devops \
-  --reuse-values --set frontend.image.tag=<build-number>
+  --reuse-values --set frontend.image.tag=<package-version>-<build-number>
 ```
 
 `--reuse-values` is what makes this safe for independent pipelines: the

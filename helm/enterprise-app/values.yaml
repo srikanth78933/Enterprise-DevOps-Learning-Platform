@@ -13,13 +13,13 @@ ingress:
 frontend:
   replicaCount: 2
   image:
-    repository: yourdockerhubuser/enterprise-devops-frontend
+    repository: devopstraining064/enterprise-devops-frontend
     tag: latest
 
 backend:
   replicaCount: 2
   image:
-    repository: yourdockerhubuser/enterprise-devops-backend
+    repository: devopstraining064/enterprise-devops-backend
     tag: latest
   autoscaling:
     enabled: true

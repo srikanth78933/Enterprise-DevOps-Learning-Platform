@@ -1,6 +1,6 @@
 # Prerequisites — Project 3: CI/CD with Helm & Independent Pipelines
 
-Builds on Project 2's prerequisites (AWS CLI, kubectl, Terraform, an EKS
+Builds on Project 2's prerequisites (AWS CLI, kubectl, an existing EKS
 cluster — see `docs/01-Prerequisites.md` on `project-02-cd-eks`).
 Additionally:
 
@@ -10,10 +10,11 @@ Additionally:
 
 ## What you need already in place
 
-- A running EKS cluster (from Project 2's `terraform apply`, or freshly
-  provisioned — this project doesn't change `terraform/` at all)
-- The NGINX Ingress Controller and Metrics Server installed (Project 2,
-  steps 3-4 of `docs/03-Installation.md`)
+- The same existing EKS cluster from Project 2 (this project doesn't
+  provision infrastructure any more than Project 2 does — no `terraform/`
+  here)
+- The EBS CSI driver, NGINX Ingress Controller, and Metrics Server
+  installed (Project 2, steps 2-4 of `docs/03-Installation.md`)
 - Docker Hub, Jenkins, SonarQube from Projects 1-2
 
 ## New this project

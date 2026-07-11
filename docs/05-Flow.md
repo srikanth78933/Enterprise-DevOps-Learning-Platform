@@ -10,7 +10,7 @@ and [`/architecture/helm-chart-structure.md`](../architecture/helm-chart-structu
 | Checkout → Package Jar | Identical to Project 1/2's backend stages |
 | Docker Build | `docker build -f docker/backend-ci.Dockerfile` |
 | Push Image | `docker push` x2 tags |
-| Helm Upgrade | `helm upgrade --install ... --reuse-values --set backend.image.tag=<build>` |
+| Helm Upgrade | `helm upgrade --install ... --reuse-values --set backend.image.tag=<version>-<build>` |
 | Verify | `kubectl rollout status deployment/backend`, then `scripts/verify-backend.sh` |
 
 ## Frontend pipeline stages
@@ -21,8 +21,18 @@ and [`/architecture/helm-chart-structure.md`](../architecture/helm-chart-structu
 | Build | `npm run build` |
 | Docker Build | `docker build -f docker/frontend-ci.Dockerfile` |
 | Push Image | `docker push` x2 tags |
-| Helm Upgrade | `helm upgrade --install ... --reuse-values --set frontend.image.tag=<build>` |
+| Helm Upgrade | `helm upgrade --install ... --reuse-values --set frontend.image.tag=<version>-<build>` |
 | Verify | `kubectl rollout status deployment/frontend`, then `scripts/verify-frontend.sh` |
+
+## Why each pipeline stamps its own version
+
+`IMAGE_TAG` is `<manifest version>-<this job's build number>` — the
+backend pipeline reads it from `backend/pom.xml`, the frontend pipeline
+from `frontend/package.json` (via `node -p`). Unlike Project 1/2, where
+one Jenkins job produced one shared tag for everything it built, these
+are now two entirely separate Jenkins jobs with their own independent
+`BUILD_NUMBER` counters — there's no single shared build to tag against,
+so each pipeline versions itself from its own source of truth instead.
 
 ## Why `--reuse-values` is the load-bearing flag in this whole project
 

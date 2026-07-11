@@ -2,8 +2,11 @@ spring:
   jpa:
     show-sql: false
     hibernate:
-      # Schema is managed by migrations in production; never let Hibernate mutate it.
-      ddl-auto: validate
+      # No migration tool (Flyway/Liquibase) exists in this project yet, so
+      # "validate" has nothing to validate against on a fresh database and
+      # the app never starts. Using "update" until a real migration tool is
+      # introduced - revisit this once one is.
+      ddl-auto: update
 
 logging:
   level:

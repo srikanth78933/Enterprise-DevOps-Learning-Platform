@@ -7,7 +7,7 @@ global:
 replicaCount: 2
 
 image:
-  repository: yourdockerhubuser/enterprise-devops-backend
+  repository: devopstraining064/enterprise-devops-backend
   tag: latest
   pullPolicy: IfNotPresent
 

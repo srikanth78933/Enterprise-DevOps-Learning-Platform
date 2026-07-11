@@ -1,10 +1,11 @@
 # Architecture — Project 3: CI/CD with Helm & Independent Microservice Pipelines
 
-This project doesn't change the AWS infrastructure at all — the EKS
-cluster from `terraform/` (see [`aws-infrastructure.md`](./aws-infrastructure.md),
-unchanged since Project 2) is exactly the same. What changes is *how* the
-application gets deployed onto it, and how CI/CD is organized around two
-independently deployable services instead of one monolithic pipeline.
+This project doesn't change the AWS infrastructure at all — the same
+existing EKS cluster from Project 2 (provisioned and managed outside this
+repo; there's no `terraform/` here, same as Project 2) is exactly the
+same. What changes is *how* the application gets deployed onto it, and
+how CI/CD is organized around two independently deployable services
+instead of one monolithic pipeline.
 
 See:
 - [`helm-chart-structure.md`](./helm-chart-structure.md) — the umbrella chart and values precedence

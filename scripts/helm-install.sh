@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # First-time install of the enterprise-app Helm release. Assumes the EKS
-# cluster already exists (see terraform-init-apply.sh) and kubectl already
-# points at it (see configure-kubeconfig.sh).
+# cluster already exists (provisioned outside this repo) and kubectl
+# already points at it (see configure-kubeconfig.sh).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
