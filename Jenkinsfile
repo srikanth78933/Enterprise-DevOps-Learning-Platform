@@ -39,7 +39,6 @@ pipeline {
         // Replace with your own Docker Hub namespace before running against a real registry.
         BACKEND_IMAGE   = 'yourdockerhubuser/enterprise-devops-backend'
         FRONTEND_IMAGE  = 'yourdockerhubuser/enterprise-devops-frontend'
-        IMAGE_TAG       = "${env.BUILD_NUMBER}"
     }
 
     stages {
@@ -53,6 +52,18 @@ pipeline {
         stage('Maven Build') {
             steps {
                 dir('backend') {
+                    script {
+                        // Backend and frontend always deploy together as one release
+                        // unit (see "Deploy to EKS"), so both images share a single
+                        // tag: the backend's pom.xml version plus the Jenkins build
+                        // number. Traceable back to the exact build, same idea as
+                        // project-01-ci-pipeline's Jenkinsfile.
+                        def devVersion = sh(
+                            script: "mvn -B -ntp -q -DforceStdout help:evaluate -Dexpression=project.version",
+                            returnStdout: true
+                        ).trim()
+                        env.IMAGE_TAG = "${devVersion.replace('-SNAPSHOT', '')}-${env.BUILD_NUMBER}"
+                    }
                     sh 'mvn -B -ntp clean compile'
                 }
             }

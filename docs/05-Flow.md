@@ -12,6 +12,18 @@ Full diagrams: [`/architecture/pipeline-diagram.md`](../architecture/pipeline-di
 | Deploy to EKS | `aws eks update-kubeconfig` → `kubectl apply -k` → `kubectl set image` x2 | AWS auth failure, cluster unreachable, invalid manifest |
 | Verify | `kubectl rollout status` x2, then `scripts/verify-deployment.sh` | Rollout doesn't complete in 180s, or the smoke test curl fails |
 
+## Why both images share one tag
+
+`IMAGE_TAG` is no longer just `${BUILD_NUMBER}` — the Maven Build stage
+now reads the backend's `pom.xml` version and appends the build number
+(e.g. `1.0.0-42`), the same technique used in
+`project-01-ci-pipeline`'s Jenkinsfile. Backend and frontend are always
+built and deployed together in this pipeline (one "Deploy to EKS" stage
+sets both), so they share this single tag rather than each tracking a
+separate version — a build number alone traces back to a Jenkins run,
+but pairing it with the actual release version makes the tag meaningful
+on its own, e.g. in `docker images` or a rollback command.
+
 ## Why `kubectl apply -k` then `kubectl set image` (not one step)
 
 `kubectl apply -k kubernetes/` is declarative and idempotent — it
