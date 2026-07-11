@@ -1,11 +1,12 @@
-// Project 3 - Frontend CI/CD Pipeline (independent of backend/Jenkinsfile)
+// Project 4 - Frontend CI/CD Pipeline (GitOps via Argo CD)
 //
-// Flow: Checkout -> Install & Test -> Build -> Docker Build -> Push Image
-//       -> Helm Upgrade (frontend only) -> Verify
+// Flow: Checkout -> Install & Test -> npm audit -> Build -> Docker Build
+//       -> Trivy Scan -> Docker Scout (optional) -> Push Image
+//       -> Update GitOps Values -> Wait for Argo CD Sync
 //
-// This pipeline only ever touches the `frontend` values of the
-// enterprise-app Helm release (--reuse-values), so it can run and deploy
-// completely independently of backend/Jenkinsfile.
+// Same key change as backend/Jenkinsfile: no cluster access, no AWS
+// credentials, no `helm upgrade` - ends at a Git commit that Argo CD
+// picks up. See gitops/README.md.
 
 pipeline {
     agent any
@@ -19,13 +20,10 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
-        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
+        ARGOCD_AUTH_TOKEN     = credentials('argocd-auth-token')
 
-        AWS_REGION       = 'us-east-1'
-        EKS_CLUSTER_NAME = 'enterprise-devops-dev-eks'
-        K8S_NAMESPACE    = 'enterprise-devops'
-        HELM_RELEASE     = 'enterprise-app'
+        ARGOCD_SERVER   = 'localhost:8080'
+        GIT_BRANCH_NAME = 'project-04-gitops-argocd'
 
         FRONTEND_IMAGE = 'yourdockerhubuser/enterprise-devops-frontend'
         IMAGE_TAG      = "${env.BUILD_NUMBER}"
@@ -44,6 +42,25 @@ pipeline {
                 dir('frontend') {
                     sh 'npm ci'
                     sh 'CI=true npm test'
+                }
+            }
+        }
+
+        stage('npm audit') {
+            steps {
+                dir('frontend') {
+                    // OWASP Dependency Check's npm equivalent for this
+                    // project - fails on any critical advisory. Threshold
+                    // is "critical" rather than "high" deliberately:
+                    // react-scripts pulls in webpack-dev-server, which has
+                    // long-standing "high" advisories in transitive deps
+                    // (sockjs, uuid) that only run in the local dev server
+                    // and never ship in the production Docker image built
+                    // from frontend/build. Gating on "high" here would fail
+                    // every build on noise instead of real production risk.
+                    // Run `npm audit fix` locally to resolve real findings,
+                    // never `--force` blindly (it can bump majors).
+                    sh 'npm audit --omit=dev --audit-level=critical'
                 }
             }
         }
@@ -70,6 +87,23 @@ pipeline {
             }
         }
 
+        stage('Trivy Scan') {
+            steps {
+                sh """
+                    trivy image --severity CRITICAL --exit-code 1 --ignore-unfixed \
+                        ${FRONTEND_IMAGE}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Docker Scout (optional)') {
+            steps {
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                    sh "docker scout cves ${FRONTEND_IMAGE}:${IMAGE_TAG} --only-severity critical --exit-code"
+                }
+            }
+        }
+
         stage('Push Image') {
             steps {
                 sh '''
@@ -81,24 +115,18 @@ pipeline {
             }
         }
 
-        stage('Helm Upgrade') {
+        stage('Update GitOps Values') {
             steps {
-                sh """
-                    aws eks update-kubeconfig --name ${EKS_CLUSTER_NAME} --region ${AWS_REGION}
-
-                    helm upgrade --install ${HELM_RELEASE} helm/enterprise-app \
-                        -n ${K8S_NAMESPACE} --create-namespace \
-                        --reuse-values \
-                        --set frontend.image.tag=${IMAGE_TAG} \
-                        --wait --timeout 5m
-                """
+                sh "./scripts/update-image-tag.sh frontend ${IMAGE_TAG}"
             }
         }
 
-        stage('Verify') {
+        stage('Wait for Argo CD Sync') {
             steps {
-                sh "kubectl rollout status deployment/frontend -n ${K8S_NAMESPACE} --timeout=180s"
-                sh './scripts/verify-frontend.sh'
+                sh """
+                    argocd login ${ARGOCD_SERVER} --auth-token \$ARGOCD_AUTH_TOKEN --insecure --grpc-web
+                    argocd app wait enterprise-app --health --sync --timeout 300
+                """
             }
         }
     }
@@ -108,7 +136,7 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Deployed ${FRONTEND_IMAGE}:${IMAGE_TAG} via Helm release ${HELM_RELEASE}"
+            echo "Committed frontend image tag ${IMAGE_TAG} - Argo CD synced it to the cluster."
         }
         failure {
             echo 'Frontend pipeline failed - see docs/06-Troubleshooting.md for common causes.'

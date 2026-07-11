@@ -1,40 +1,54 @@
-# Cleanup — Project 3: CI/CD with Helm & Independent Pipelines
+# Cleanup — Project 4: GitOps with Argo CD
 
-Order matters — same reasoning as Project 2, now via Helm.
-
-## 1. Uninstall the Helm release (removes the app's Ingress too)
+## 1. Delete the Argo CD Application (also deletes what it deployed)
 
 ```bash
-./scripts/helm-uninstall.sh
+kubectl delete -f gitops/applications/enterprise-app.yaml
 ```
 
-Confirm the Ingress load balancer is actually gone (AWS Console → EC2 →
-Load Balancers) before proceeding.
+The `resources-finalizer.argocd.argoproj.io` finalizer on the Application
+(see that file) means this also removes the Deployments/Services/HPA/
+Ingress it created — confirm the Ingress load balancer is actually gone
+(AWS Console → EC2 → Load Balancers) before proceeding to infra teardown.
 
-## 2. Remove the Ingress Controller
+## 2. Remove the AppProject
+
+```bash
+kubectl delete -f gitops/projects/enterprise-devops-project.yaml
+```
+
+## 3. Uninstall Argo CD itself
+
+```bash
+helm uninstall argocd -n argocd
+kubectl delete namespace argocd
+```
+
+## 4. Remove the Ingress Controller
 
 ```bash
 helm uninstall ingress-nginx -n ingress-nginx
 ```
 
-## 3. Remove the secrets and PVC (only if you want the data gone)
+## 5. Remove secrets and PVC (only if you want the data gone)
 
 ```bash
 kubectl delete secret backend-secret mysql-secret -n enterprise-devops
 kubectl delete pvc mysql-pvc -n enterprise-devops
 ```
 
-## 4. Destroy the AWS infrastructure
+## 6. Destroy the AWS infrastructure
 
 ```bash
 ./scripts/terraform-destroy.sh
 ```
 
-## 5. Local cleanup
+## 7. Revoke tokens created for this project
 
-```bash
-rm -rf backend/target frontend/build frontend/node_modules
-```
+- The Argo CD `jenkins-ci` account token
+  (`argocd account delete-token jenkins-ci <token-id>`)
+- The GitHub PAT created for Jenkins' git write-back, if solely used for
+  this learning exercise
 
 ## Next
 

@@ -127,6 +127,27 @@
                 <artifactId>sonar-maven-plugin</artifactId>
                 <version>4.0.0.4121</version>
             </plugin>
+
+            <!-- Project 4: scans third-party dependencies against the NVD
+                 CVE database. Run explicitly via `mvn dependency-check:check`
+                 in the Jenkinsfile (not bound to a lifecycle phase) since it's
+                 slow and network-dependent - not something every `mvn test`
+                 should pay for locally. -->
+            <plugin>
+                <groupId>org.owasp</groupId>
+                <artifactId>dependency-check-maven</artifactId>
+                <version>9.2.0</version>
+                <configuration>
+                    <failBuildOnCVSS>8</failBuildOnCVSS>
+                    <suppressionFiles>
+                        <suppressionFile>owasp-suppressions.xml</suppressionFile>
+                    </suppressionFiles>
+                    <formats>
+                        <format>HTML</format>
+                        <format>JSON</format>
+                    </formats>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>

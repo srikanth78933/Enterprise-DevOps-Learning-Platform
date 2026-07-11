@@ -1,46 +1,57 @@
-# Architecture — Project 3: CI/CD with Helm & Independent Microservice Pipelines
+# Architecture — Project 4: GitOps with Argo CD
 
-This project doesn't change the AWS infrastructure at all — the EKS
-cluster from `terraform/` (see [`aws-infrastructure.md`](./aws-infrastructure.md),
-unchanged since Project 2) is exactly the same. What changes is *how* the
-application gets deployed onto it, and how CI/CD is organized around two
-independently deployable services instead of one monolithic pipeline.
+This project doesn't change the AWS infrastructure (`terraform/`, still
+Project 2's cluster) or the Helm chart's *shape* (`helm/enterprise-app/`,
+still Project 3's frontend/backend/mysql subcharts). What changes is who's
+allowed to deploy: Jenkins loses cluster credentials entirely, and Argo CD
+becomes the only path from "declared in Git" to "running in the cluster."
 
-See:
-- [`helm-chart-structure.md`](./helm-chart-structure.md) — the umbrella chart and values precedence
-- [`pipeline-diagram.md`](./pipeline-diagram.md) — the two independent pipelines
+See [`pipeline-diagram.md`](./pipeline-diagram.md) for the full flow and
+sequence diagrams.
 
-## What's new vs. project-02-cd-eks
+## What's new vs. project-03-cicd-helm-microservices
 
 | Added | Removed | Purpose |
 |---|---|---|
-| `helm/enterprise-app/` (umbrella chart: frontend/backend/mysql subcharts) | `kubernetes/` (raw manifests) | Templated, reusable, environment-overridable deployment |
-| `backend/Jenkinsfile` | root `Jenkinsfile` | Backend builds/deploys independently |
-| `frontend/Jenkinsfile` | — | Frontend builds/deploys independently |
-| `docker/frontend-ci.Dockerfile` (from Project 2, unchanged) | — | Still used, now invoked by `frontend/Jenkinsfile` directly |
+| `gitops/projects/enterprise-devops-project.yaml` | — | Argo CD AppProject: scopes allowed repos/destinations |
+| `gitops/applications/enterprise-app.yaml` | — | Argo CD Application: the desired-state declaration |
+| `gitops/argocd/values.yaml` | — | Helm values for installing Argo CD itself |
+| `helm/enterprise-app/values-images/{backend,frontend}.yaml` | — | Git-tracked, Jenkins-managed image tags Argo CD watches |
+| OWASP Dependency Check (backend), `npm audit` (frontend), Trivy image scan (both), Docker Scout (both, optional) | — | Security scanning gates before an image ships |
+| `scripts/update-image-tag.sh` | — | What replaced `helm upgrade`/`kubectl set image` in both Jenkinsfiles |
+| — | AWS credentials from both Jenkinsfiles | Jenkins no longer needs cluster access at all |
+| — | "Helm Upgrade" / "Deploy to EKS" stages | Replaced by "Update GitOps Values" + "Wait for Argo CD Sync" |
 
 ## Key design decisions
 
-- **One Helm release, two pipelines, `--reuse-values` as the safety net.**
-  See `pipeline-diagram.md` for why this specifically prevents one
-  pipeline's deploy from clobbering the other's.
-- **No `dependencies:` via a chart repository.** `Chart.yaml` declares
-  `file://` dependencies pointing at the subchart directories Helm already
-  auto-loads from `charts/` — declared explicitly because `helm lint`
-  otherwise flags undeclared subchart dependencies as an error, not
-  because `helm dependency update` is actually required here.
-- **Secrets still never touch Helm.** `existingSecret` values reference
-  Kubernetes Secrets created imperatively (same `kubectl create secret`
-  pattern as Project 2) — `helm template`/`helm get values` output never
-  contains a real credential.
-- **Fixed (non-release-prefixed) subchart resource names.** Trades
-  multi-release-per-namespace flexibility for keeping `backend`'s
-  hardcoded `DB_URL` host stable. See `helm-chart-structure.md` for the
-  full reasoning.
+- **`values-images/*.yaml` live inside the Helm chart directory, not
+  under `gitops/`.** Argo CD resolves Helm `valueFiles` relative to
+  `source.path` and restricts `../` traversal outside it by default. Two
+  tiny always-the-same-shape files inside the chart avoids that
+  restriction entirely — see `gitops/README.md` for the full reasoning.
+- **Jenkins loses `kubectl`/AWS credentials on purpose.** This is the
+  actual point of GitOps, not an incidental cleanup: exactly one thing
+  (Argo CD) can mutate cluster state for this application, which is what
+  makes "what's running in production" always traceable to a specific Git
+  commit.
+- **`argocd app wait` is a read-only status check, not a deploy step.**
+  Both Jenkinsfiles still confirm the deploy actually succeeded before
+  reporting the build green — they just do it by *asking* Argo CD, not by
+  *doing* the deploy themselves.
+- **Docker Scout is non-blocking (`catchError` → `UNSTABLE`, never
+  `FAILURE`).** Matches the spec's "(Optional)" framing — Trivy is the
+  blocking image scanner; Docker Scout is a second opinion, not a second
+  gate. Grype is documented as a swappable alternative in
+  `docs/08-Assignments.md` rather than added as a third redundant scanner.
+- **`targetRevision` in `gitops/applications/enterprise-app.yaml` points
+  at this exact branch.** A real GitOps setup tracks a stable branch or a
+  dedicated environment branch, not a per-lesson feature branch — this is
+  a tutorial-scoped simplification, called out explicitly in that file's
+  comments.
 
 ## Next branch
 
-`project-04-gitops-argocd` replaces `kubectl`/`helm upgrade` calls from
-Jenkins with Argo CD watching a Git repository — Jenkins's job becomes
-"build, push, and update a values file in Git," not "deploy directly."
-Also introduces Trivy, OWASP Dependency Check, and Docker Scout scanning.
+`project-05-logging-elk` adds centralized logging (Filebeat → Logstash →
+Elasticsearch → Kibana) for both services, deployed the same GitOps way
+this project established — a new subchart, same Argo CD Application
+pattern.

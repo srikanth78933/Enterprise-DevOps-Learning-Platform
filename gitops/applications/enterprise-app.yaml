@@ -1,0 +1,52 @@
+# Argo CD Application - the desired-state declaration Argo CD continuously
+# reconciles the cluster against. Replaces `helm upgrade` calls from
+# Jenkins (Project 3) entirely: Jenkins's job now ends at "commit the new
+# image tag to Git" (see gitops/README.md for the full flow).
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: enterprise-app
+  namespace: argocd
+  finalizers:
+    # Ensures `argocd app delete` also deletes the Kubernetes resources it
+    # created, instead of orphaning them.
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: enterprise-devops
+
+  source:
+    repoURL: "https://github.com/srikanth78933/Enterprise-DevOps-Learning-Platform.git"
+    # A real GitOps setup tracks a stable branch (main, or a dedicated
+    # environment branch like "env/dev") - this points at the branch this
+    # exact lesson lives on so the tutorial is self-contained per branch.
+    # If you fork this project past the tutorial, point this at your
+    # actual long-lived deployment branch instead.
+    targetRevision: project-04-gitops-argocd
+    path: helm/enterprise-app
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-images/backend.yaml
+        - values-images/frontend.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: enterprise-devops
+
+  syncPolicy:
+    automated:
+      # Deletes resources that are no longer in Git - keeps the cluster
+      # from accumulating orphaned objects from removed manifests.
+      prune: true
+      # Reverts manual `kubectl edit`/`kubectl scale` drift back to what's
+      # in Git - this is "self-healing" in practice, not just a slogan.
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

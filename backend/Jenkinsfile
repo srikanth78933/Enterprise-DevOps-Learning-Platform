@@ -1,14 +1,14 @@
-// Project 3 - Backend CI/CD Pipeline (independent of frontend/Jenkinsfile)
+// Project 4 - Backend CI/CD Pipeline (GitOps via Argo CD)
 //
 // Flow: Checkout -> Maven Build -> Unit Test -> SonarQube -> Quality Gate
-//       -> Parallel Stage -> Package Jar -> Docker Build -> Push Image
-//       -> Helm Upgrade (backend only) -> Verify
+//       -> Parallel Stage -> Package Jar -> OWASP Dependency Check
+//       -> Docker Build -> Trivy Scan -> Docker Scout (optional)
+//       -> Push Image -> Update GitOps Values -> Wait for Argo CD Sync
 //
-// This pipeline only ever touches the `backend` values of the enterprise-app
-// Helm release (--reuse-values), so it can run and deploy completely
-// independently of frontend/Jenkinsfile - the point of splitting them.
-// See jenkins/README.md for one-time setup (unchanged from Project 2, plus
-// `helm` now required on the agent).
+// Key change from project-03: this pipeline no longer touches the cluster
+// at all - no `kubectl`, no `helm upgrade`, no AWS credentials. It ends by
+// committing a new image tag to Git; Argo CD (watching the repo) does the
+// actual deploy. See gitops/README.md for the full picture.
 
 pipeline {
     agent any
@@ -22,19 +22,16 @@ pipeline {
         timestamps()
         buildDiscarder(logRotator(numToKeepStr: '20'))
         disableConcurrentBuilds()
-        timeout(time: 45, unit: 'MINUTES')
+        timeout(time: 50, unit: 'MINUTES')
     }
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
-        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
+        ARGOCD_AUTH_TOKEN     = credentials('argocd-auth-token')
 
         SONARQUBE_ENV    = 'sonarqube-server'
-        AWS_REGION       = 'us-east-1'
-        EKS_CLUSTER_NAME = 'enterprise-devops-dev-eks'
-        K8S_NAMESPACE    = 'enterprise-devops'
-        HELM_RELEASE     = 'enterprise-app'
+        ARGOCD_SERVER    = 'localhost:8080'
+        GIT_BRANCH_NAME  = 'project-04-gitops-argocd'
 
         BACKEND_IMAGE = 'yourdockerhubuser/enterprise-devops-backend'
         IMAGE_TAG     = "${env.BUILD_NUMBER}"
@@ -119,12 +116,48 @@ pipeline {
             }
         }
 
+        stage('OWASP Dependency Check') {
+            steps {
+                dir('backend') {
+                    // Fails the build on any dependency with CVSS >= 8
+                    // (see failBuildOnCVSS in pom.xml). Suppress confirmed
+                    // false positives in owasp-suppressions.xml, never here.
+                    sh 'mvn -B -ntp dependency-check:check'
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'backend/target/dependency-check-report.*', allowEmptyArchive: true
+                }
+            }
+        }
+
         stage('Docker Build') {
             steps {
                 sh """
                     docker build -f docker/backend-ci.Dockerfile \
                         -t ${BACKEND_IMAGE}:${IMAGE_TAG} -t ${BACKEND_IMAGE}:latest .
                 """
+            }
+        }
+
+        stage('Trivy Scan') {
+            steps {
+                // Fails the build on any CRITICAL vulnerability with a known
+                // fix available. Unfixed CVEs are reported but don't block -
+                // there's nothing actionable to do about them yet.
+                sh """
+                    trivy image --severity CRITICAL --exit-code 1 --ignore-unfixed \
+                        ${BACKEND_IMAGE}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Docker Scout (optional)') {
+            steps {
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                    sh "docker scout cves ${BACKEND_IMAGE}:${IMAGE_TAG} --only-severity critical --exit-code"
+                }
             }
         }
 
@@ -139,24 +172,18 @@ pipeline {
             }
         }
 
-        stage('Helm Upgrade') {
+        stage('Update GitOps Values') {
             steps {
-                sh """
-                    aws eks update-kubeconfig --name ${EKS_CLUSTER_NAME} --region ${AWS_REGION}
-
-                    helm upgrade --install ${HELM_RELEASE} helm/enterprise-app \
-                        -n ${K8S_NAMESPACE} --create-namespace \
-                        --reuse-values \
-                        --set backend.image.tag=${IMAGE_TAG} \
-                        --wait --timeout 5m
-                """
+                sh "./scripts/update-image-tag.sh backend ${IMAGE_TAG}"
             }
         }
 
-        stage('Verify') {
+        stage('Wait for Argo CD Sync') {
             steps {
-                sh "kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=180s"
-                sh './scripts/verify-backend.sh'
+                sh """
+                    argocd login ${ARGOCD_SERVER} --auth-token \$ARGOCD_AUTH_TOKEN --insecure --grpc-web
+                    argocd app wait enterprise-app --health --sync --timeout 300
+                """
             }
         }
     }
@@ -166,7 +193,7 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Deployed ${BACKEND_IMAGE}:${IMAGE_TAG} via Helm release ${HELM_RELEASE}"
+            echo "Committed backend image tag ${IMAGE_TAG} - Argo CD synced it to the cluster."
         }
         failure {
             echo 'Backend pipeline failed - see docs/06-Troubleshooting.md for common causes.'

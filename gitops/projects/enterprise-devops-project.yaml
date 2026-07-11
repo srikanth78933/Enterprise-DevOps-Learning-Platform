@@ -1,0 +1,30 @@
+# Argo CD AppProject - scopes what the enterprise-app Application (and any
+# future ones) is allowed to deploy, and from where. Without this, every
+# Application would fall back to the "default" AppProject, which has no
+# restrictions - fine for a single-app learning cluster, but worth modeling
+# correctly since it's the first thing a real org configures.
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: enterprise-devops
+  namespace: argocd
+spec:
+  description: Enterprise DevOps Learning Platform
+
+  # Replace with your fork's URL - Argo CD refuses to sync an Application
+  # whose repoURL isn't allow-listed here.
+  sourceRepos:
+    - "https://github.com/srikanth78933/Enterprise-DevOps-Learning-Platform.git"
+
+  destinations:
+    - namespace: enterprise-devops
+      server: https://kubernetes.default.svc
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

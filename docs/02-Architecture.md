@@ -1,39 +1,37 @@
-# Architecture — Project 3: CI/CD with Helm & Independent Pipelines
+# Architecture — Project 4: GitOps with Argo CD
 
 Full detail lives in [`/architecture`](../architecture/README.md) — this
 page is the short version.
 
-## Helm chart layers
+## New layer: `gitops/`
 
 ```
-helm/enterprise-app/               → umbrella chart, owns the Ingress
-helm/enterprise-app/charts/mysql/  → single-replica MySQL + PVC
-helm/enterprise-app/charts/backend/  → Deployment, Service, ConfigMap, HPA
-helm/enterprise-app/charts/frontend/ → Deployment, Service, optional HPA
-```
-
-See [`architecture/helm-chart-structure.md`](../architecture/helm-chart-structure.md)
-for the values-precedence diagram and why subchart resource names are
-fixed rather than release-prefixed.
-
-## Pipeline layers (now two, not one)
-
-```
-backend/Jenkinsfile   → Maven/JUnit/SonarQube/Docker/Helm --set backend.image.tag
-frontend/Jenkinsfile  → npm/Docker/Helm --set frontend.image.tag
+gitops/argocd/values.yaml                       → how Argo CD itself is installed
+gitops/projects/enterprise-devops-project.yaml   → what Argo CD is allowed to touch
+gitops/applications/enterprise-app.yaml          → the desired-state declaration
 ```
 
 See [`architecture/pipeline-diagram.md`](../architecture/pipeline-diagram.md)
-for the full flow and the `--reuse-values` mechanism that keeps the two
-pipelines from clobbering each other's last deployed image tag.
+for the full flow and the self-healing reconciliation loop diagram.
 
-## What didn't change
+## What each pipeline stage does now vs. Project 3
 
-- The AWS infrastructure (`terraform/`) — same VPC, same EKS cluster
-- The application code (`backend/src`, `frontend/src`) — identical to
-  Project 2
-- The Docker images themselves (`docker/backend-ci.Dockerfile`,
-  `docker/frontend-ci.Dockerfile`)
+```
+Project 3: ... -> Docker Build -> Push Image -> Helm Upgrade (Jenkins deploys) -> Verify (Jenkins checks kubectl rollout)
+Project 4: ... -> Docker Build -> Trivy Scan -> Push Image -> Update GitOps Values (commit+push) -> Wait for Argo CD Sync (Jenkins asks Argo CD's status)
+```
+
+The "Verify"-shaped stage still exists (`Wait for Argo CD Sync`), but its
+nature changed completely: it's a read-only status poll against the Argo
+CD API, not a `kubectl rollout status` against the cluster Jenkins itself
+just modified.
+
+## New security scanning layer
+
+```
+backend/Jenkinsfile:  OWASP Dependency Check (Maven deps) -> Trivy (image) -> Docker Scout (image, optional)
+frontend/Jenkinsfile: npm audit (npm deps)                -> Trivy (image) -> Docker Scout (image, optional)
+```
 
 ## Next
 

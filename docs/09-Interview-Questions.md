@@ -1,45 +1,49 @@
-# Interview Questions — Project 3: CI/CD with Helm & Independent Pipelines
+# Interview Questions — Project 4: GitOps with Argo CD
 
-## Helm fundamentals
+## GitOps fundamentals
 
-1. What's the difference between a chart's `values.yaml` and a `-f
-   custom-values.yaml` overlay, in terms of precedence? Where does `--set`
-   fit in that order?
-2. Explain what `--reuse-values` actually does, mechanically. Why is
-   `--reuse-values` alone not equivalent to `helm upgrade` with no flags?
-3. Why does the umbrella chart's `values.yaml` set values under top-level
-   keys named exactly `frontend`, `backend`, `mysql`? What happens if you
-   rename the `backend/` directory under `charts/` to `api/` but forget to
-   rename the corresponding key in the parent's `values.yaml`?
-4. What is `helm template` for, and how does it differ from `helm install
-   --dry-run`?
+1. Define GitOps in one sentence that distinguishes it from "we deploy via
+   CI/CD." What's the actual difference if both end up running `kubectl
+   apply` eventually?
+2. What does "desired state" mean concretely in this project — point at
+   the specific files that constitute it.
+3. Explain "self-healing" using this project's `selfHeal: true` setting.
+   What class of incident does this prevent that a traditional CD pipeline
+   doesn't?
+4. Why is `git revert` the correct way to roll back in this project,
+   rather than re-running an old Jenkins build?
 
-## This chart specifically
+## Argo CD specifics
 
-5. Why does `backend/templates/deployment.yaml` use `envFrom: secretRef`
-   pointing at `.Values.existingSecret` instead of the chart creating and
-   templating a `Secret` object itself?
-6. Why does `mysql`'s `_helpers.tpl` return a hardcoded name instead of
-   the conventional `{{ .Release.Name }}-<chart>` pattern? What capability
-   does the chart lose by doing this?
-7. Walk through exactly what Kubernetes objects change (and which don't)
-   when `backend/Jenkinsfile` runs `helm upgrade --set
-   backend.image.tag=42 --reuse-values`.
+5. What's the difference between an Argo CD `AppProject` and an
+   `Application`? Why does a single-app learning cluster still benefit
+   from having both instead of using the `default` AppProject?
+6. Walk through what `syncPolicy.automated.prune: true` actually does, and
+   describe a scenario where it could delete something you didn't intend.
+7. Why does `gitops/applications/enterprise-app.yaml` have a
+   `resources-finalizer.argocd.argoproj.io` finalizer? What would deleting
+   the Application look like without it?
+8. What's the practical difference between Argo CD's default Git polling
+   interval and a configured webhook, in terms of both latency and load?
 
-## Pipeline architecture
+## This project's design choices
 
-8. What's the actual argument for splitting one Jenkinsfile into
-   `backend/Jenkinsfile` and `frontend/Jenkinsfile`? What did the single
-   combined pipeline (Projects 1-2) cost you that this fixes?
-9. Both pipelines deploy to the same Helm release. What could go wrong if
-   they ran concurrently, and what (if anything) protects against it?
-10. If you had ten microservices instead of two, would you keep scaling
-    this "one Jenkinsfile per service, one shared umbrella chart" pattern?
-    What would start to hurt first?
+9. Why do `helm/enterprise-app/values-images/backend.yaml` and
+   `frontend.yaml` live inside the Helm chart directory instead of under
+   `gitops/`, given that `gitops/` is conceptually where "things Argo CD
+   watches" belong?
+10. Why did Jenkins lose its AWS/kubectl credentials entirely in this
+    project, when Project 3's Jenkins had them? What's the actual security
+    benefit, concretely (not just "least privilege" as a slogan)?
+11. `argocd app wait --health --sync` in both Jenkinsfiles — what does
+    this stage actually verify, and what does it *not* verify that
+    Project 3's `kubectl rollout status` did check?
 
-## Looking ahead
+## Security scanning
 
-11. This project still has Jenkins calling `helm upgrade` directly. What
-    problems does that create for auditability and "what's actually
-    running in production right now" that Project 4's GitOps approach is
-    about to solve?
+12. Why does Trivy block the pipeline while Docker Scout only marks it
+    `UNSTABLE`? Is running both actually redundant, or do they check
+    meaningfully different things?
+13. What does `--ignore-unfixed` on the Trivy scan trade away, and why is
+    that an acceptable tradeoff for a CI gate specifically (as opposed to,
+    say, a periodic audit report)?

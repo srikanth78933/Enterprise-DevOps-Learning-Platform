@@ -1,54 +1,49 @@
-# Pipeline & Helm Flow — Project 3
+# GitOps Flow — Project 4
 
-Full diagrams: [`/architecture/pipeline-diagram.md`](../architecture/pipeline-diagram.md)
-and [`/architecture/helm-chart-structure.md`](../architecture/helm-chart-structure.md).
+Full diagrams: [`/architecture/pipeline-diagram.md`](../architecture/pipeline-diagram.md).
 
-## Backend pipeline stages
+## What each new/changed stage does
 
-| Stage | Command |
-|---|---|
-| Checkout → Package Jar | Identical to Project 1/2's backend stages |
-| Docker Build | `docker build -f docker/backend-ci.Dockerfile` |
-| Push Image | `docker push` x2 tags |
-| Helm Upgrade | `helm upgrade --install ... --reuse-values --set backend.image.tag=<build>` |
-| Verify | `kubectl rollout status deployment/backend`, then `scripts/verify-backend.sh` |
+| Stage | Command | Fails the build if... |
+|---|---|---|
+| OWASP Dependency Check (backend only) | `mvn dependency-check:check` | Any dependency has CVSS >= 8 and isn't suppressed |
+| npm audit (frontend only) | `npm audit --omit=dev --audit-level=high` | Any runtime dependency has a high/critical advisory |
+| Trivy Scan (both) | `trivy image --severity CRITICAL --exit-code 1 --ignore-unfixed` | Any *fixable* CRITICAL CVE in the built image |
+| Docker Scout (both, optional) | `docker scout cves --only-severity critical --exit-code` | Never fails the build — `catchError` caps it at `UNSTABLE` |
+| Update GitOps Values | `scripts/update-image-tag.sh <service> <tag>` | Push fails after 3 rebase-and-retry attempts |
+| Wait for Argo CD Sync | `argocd app wait --health --sync` | Argo CD doesn't report Synced+Healthy within 300s |
 
-## Frontend pipeline stages
+## Why Trivy blocks but Docker Scout doesn't
 
-| Stage | Command |
-|---|---|
-| Install & Test | `npm ci && npm test` |
-| Build | `npm run build` |
-| Docker Build | `docker build -f docker/frontend-ci.Dockerfile` |
-| Push Image | `docker push` x2 tags |
-| Helm Upgrade | `helm upgrade --install ... --reuse-values --set frontend.image.tag=<build>` |
-| Verify | `kubectl rollout status deployment/frontend`, then `scripts/verify-frontend.sh` |
+Running two full vulnerability scanners as equally-blocking gates means
+every finding either tool disagrees about (different CVE databases,
+different severity scoring) becomes a pipeline outage someone has to
+adjudicate. Trivy is the one blocking gate; Docker Scout runs as a second
+opinion that surfaces in the build's `UNSTABLE` status without stopping
+delivery — a deliberate choice, not an oversight. See
+`docs/08-Assignments.md` for swapping in Grype as a third option to
+compare against.
 
-## Why `--reuse-values` is the load-bearing flag in this whole project
+## The commit that actually deploys
 
-Without it, every `helm upgrade` would reset to `helm/enterprise-app/values.yaml`
-defaults for everything you don't explicitly `--set` — including the
-*other* pipeline's last deployed image tag. `--reuse-values` tells Helm
-"start from what's currently live, not from the chart's defaults," so
-`backend/Jenkinsfile`'s upgrade only ever changes `backend.image.tag` and
-leaves `frontend.image.tag` exactly as `frontend/Jenkinsfile` last set it.
-
-This is the Helm-native answer to the same problem Project 2 solved with
-`kubectl set image` (a targeted single-field update) — same goal, chart-
-based mechanism.
-
-## Values resolution at upgrade time
-
-```mermaid
-flowchart LR
-    A["Chart defaults<br/>(values.yaml)"] --> D[Effective values]
-    B["Currently-live release values<br/>(--reuse-values)"] --> D
-    C["--set backend.image.tag=42<br/>(this pipeline's only change)"] --> D
-    D --> E[helm upgrade renders + applies]
+```bash
+git show --stat HEAD  # after a pipeline run, on gitops-relevant commits
 ```
 
-`--set` always wins over `--reuse-values`, which always wins over chart
-defaults for any key it actually carries forward.
+Every deploy has exactly one corresponding Git commit:
+`chore(gitops): bump backend image tag to 47 [skip ci]`, touching exactly
+one file. This is the audit trail GitOps is actually for — "what's
+running in production" is always answerable by `git log
+helm/enterprise-app/values-images/`.
+
+## Argo CD's reconciliation loop (independent of Jenkins)
+
+Argo CD polls the Git repository (default every 3 minutes) and reacts to
+webhooks if configured, comparing the rendered Helm output against live
+cluster state on every pass — completely independent of whether Jenkins
+is running, healthy, or even installed. If Jenkins is down for a day, any
+commit anyone pushes to `values-images/*.yaml` by hand still gets deployed
+by Argo CD. That decoupling is the point.
 
 ## Next
 

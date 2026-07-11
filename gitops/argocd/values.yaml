@@ -1,0 +1,31 @@
+# Minimal overrides for installing Argo CD itself via the official Helm
+# chart (argo/argo-cd). See scripts/argocd-install.sh for the install
+# command that uses this file.
+#
+# These are learning-environment shortcuts, not production settings - see
+# the comments below.
+
+configs:
+  params:
+    # Serves the UI/API over plain HTTP behind the LoadBalancer/port-forward
+    # used in this tutorial, instead of requiring a real TLS cert up front.
+    # Terminate TLS properly (via the Ingress or a cert-manager-issued
+    # cert) before exposing this beyond your own machine.
+    server.insecure: true
+
+server:
+  service:
+    type: ClusterIP
+    # Accessed via `kubectl port-forward` in this project (see
+    # docs/03-Installation.md) rather than an Ingress/LoadBalancer, to
+    # avoid provisioning a second Load Balancer alongside the one
+    # ingress-nginx already created in Project 2.
+
+controller:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi

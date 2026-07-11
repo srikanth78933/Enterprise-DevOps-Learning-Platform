@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# First-time install of the enterprise-app Helm release. Assumes the EKS
-# cluster already exists (see terraform-init-apply.sh) and kubectl already
-# points at it (see configure-kubeconfig.sh).
+# Carried over from project-03. Since project-04, prefer
+# scripts/argocd-install.sh + scripts/argocd-bootstrap.sh instead - Argo CD
+# performs the equivalent first install once the Application is registered,
+# and then keeps managing it (this script's install is a one-time action;
+# Argo CD's is continuous). Still useful for confirming the chart installs
+# cleanly in isolation (e.g. a throwaway namespace) before wiring up
+# Argo CD, or for chart development outside the GitOps flow entirely.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

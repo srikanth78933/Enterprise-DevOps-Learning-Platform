@@ -1,54 +1,61 @@
-# Troubleshooting — Project 3: CI/CD with Helm & Independent Pipelines
+# Troubleshooting — Project 4: GitOps with Argo CD
 
-## `helm lint` fails with "chart metadata is missing these dependencies"
+## Argo CD Application stuck `OutOfSync` forever, never reconciles
 
-`Chart.yaml` in `helm/enterprise-app/` must explicitly declare `frontend`,
-`backend`, and `mysql` under `dependencies:` (even though they're local,
-unpacked chart directories under `charts/` that Helm loads automatically
-regardless). This is a lint-time check, not a runtime requirement — but
-keep the declaration anyway, it's genuinely useful documentation of what
-the umbrella chart is made of.
+Check `kubectl describe application enterprise-app -n argocd` for the
+actual error. Common causes: `repoURL` in
+`gitops/applications/enterprise-app.yaml` doesn't match what's allow-listed
+in `gitops/projects/enterprise-devops-project.yaml`'s `sourceRepos`, or the
+`targetRevision` branch doesn't exist / was force-pushed out from under it.
 
-## `helm upgrade` resets the other service's image tag
+## `Error: secrets "backend-secret" not found` in the Application's sync error
 
-You (or a script) forgot `--reuse-values`. See `docs/05-Flow.md` — this is
-the single most common mistake when hand-running Helm commands during this
-project. Fix: `helm rollback enterprise-app <previous-revision>` to
-recover, then re-run with `--reuse-values`.
+Same root cause as Project 3 — Argo CD renders the chart the same way
+`helm install` does, and it references `existingSecret` by name. Create
+the secrets first; Argo CD doesn't create them for you (intentionally —
+see `helm/enterprise-app/README.md`).
 
-## `Error: INSTALLATION FAILED: ... backend-secret" not found`
+## `scripts/update-image-tag.sh` fails with "failed to push after 3 attempts"
 
-The chart references `backend-secret`/`mysql-secret` by name
-(`existingSecret` in each subchart's values) but doesn't create them.
-Create them first — see `helm/enterprise-app/README.md`.
+Something else is committing to the branch concurrently faster than the
+rebase-retry loop can keep up (rare with two files that never overlap,
+but possible if a human is also pushing to the branch during a demo).
+Re-run the pipeline, or push manually after investigating
+`git log --oneline -5`.
 
-## `helm upgrade --wait` times out
+## Jenkins pipeline re-triggers itself in a loop after every deploy
 
-Same failure modes as Project 2's `kubectl rollout status` timing out
-(bad DB credentials, image pull errors, failing readiness probe) — check
-`kubectl describe pod` and `kubectl logs` for the specific pod. `--wait`
-just makes Helm itself block on the same rollout Project 2 waited on
-explicitly with `kubectl rollout status`.
+The webhook/polling trigger isn't actually scoped to `backend/**` /
+`frontend/**` — see `jenkins/README.md` step 8's loop-avoidance note. Fix
+the trigger's path filter; don't rely on the `[skip ci]` commit message
+marker alone unless your specific Jenkins trigger plugin actually honors it
+(many don't, by default).
 
-## Two Jenkins jobs both try to deploy at once and one fails
+## `argocd login` fails with a certificate error
 
-`helm upgrade` on the same release from two concurrent invocations can
-race (Helm holds a per-release lock, so the second one usually just fails
-cleanly with "another operation is in progress" rather than corrupting
-anything). If your webhook triggers are firing both pipelines simultaneously
-for unrelated changes, that's usually a sign the webhook path filters
-(`backend/**` vs `frontend/**`) aren't actually scoped correctly — see
-`jenkins/README.md` step 7.
+The `--insecure` flag in both Jenkinsfiles' "Wait for Argo CD Sync" stage
+is what allows this against the self-signed cert from
+`gitops/argocd/values.yaml`'s `server.insecure: true` setting. If you
+changed that to a real TLS setup, remove `--insecure` and ensure the
+agent trusts the real certificate instead.
 
-## Ingress works for `/` but not `/api`, or vice versa
+## Docker Scout stage shows `UNSTABLE` — is that a real problem?
 
-Confirm both entries actually rendered:
-`helm template enterprise-app helm/enterprise-app | grep -A5 "kind: Ingress"`.
-A common mistake when hand-editing `helm/enterprise-app/templates/ingress.yaml`
-is putting the more specific path (`/api`) *after* the catch-all (`/`) —
-NGINX Ingress evaluates paths in the order Kubernetes returns them, and
-`pathType: Prefix` on `/` will happily also match `/api/employees` if it's
-evaluated first.
+Check the stage log for what it actually found. `UNSTABLE` here means
+"Docker Scout found a critical CVE, but this doesn't block delivery" — it's
+informational by design (see `architecture/README.md`). Treat repeated
+`UNSTABLE` builds as a signal to investigate, not as noise to ignore
+indefinitely.
+
+## Self-heal demo doesn't revert the scaled replicas
+
+Confirm `syncPolicy.automated.selfHeal: true` is actually set in
+`gitops/applications/enterprise-app.yaml` and that the Application applied
+successfully (`kubectl get application enterprise-app -n argocd -o
+yaml | grep -A3 syncPolicy`). Also check Argo CD's reconciliation
+interval hasn't been tuned up in your install — the default 3-minute
+polling means `scripts/simulate-self-heal.sh`'s 5-minute wait should
+always be enough, but a heavily loaded Argo CD controller can lag further.
 
 ## Next
 

@@ -1,25 +1,36 @@
-# Prerequisites — Project 3: CI/CD with Helm & Independent Pipelines
+# Prerequisites — Project 4: GitOps with Argo CD
 
-Builds on Project 2's prerequisites (AWS CLI, kubectl, Terraform, an EKS
-cluster — see `docs/01-Prerequisites.md` on `project-02-cd-eks`).
-Additionally:
+Builds on Project 3's prerequisites (Helm, a running EKS cluster with
+Ingress Controller + Metrics Server — see `docs/01-Prerequisites.md` on
+`project-03-cicd-helm-microservices`). Additionally:
 
 | Tool | Minimum Version | Check |
 |---|---|---|
-| Helm | 3.14+ | `helm version` |
+| Argo CD CLI | 2.11+ | `argocd version --client` |
+| Trivy | 0.50+ | `trivy --version` |
+| Docker Scout CLI (optional) | latest | `docker scout version` |
 
 ## What you need already in place
 
-- A running EKS cluster (from Project 2's `terraform apply`, or freshly
-  provisioned — this project doesn't change `terraform/` at all)
-- The NGINX Ingress Controller and Metrics Server installed (Project 2,
-  steps 3-4 of `docs/03-Installation.md`)
-- Docker Hub, Jenkins, SonarQube from Projects 1-2
+- A running EKS cluster with the NGINX Ingress Controller and Metrics
+  Server (Project 2)
+- The `enterprise-app` Helm chart working via manual `helm install`
+  (Project 3) — confirm this before adding Argo CD on top, so you're not
+  debugging two new things at once
+- A GitHub Personal Access Token (fine-grained, `Contents: read/write`
+  scoped to this repo only) for Jenkins to commit GitOps value changes —
+  see `jenkins/README.md` step 8
 
-## New this project
+## New concept this project assumes no prior exposure to
 
-Two Jenkins pipeline jobs instead of one — see
-[`jenkins/README.md`](../jenkins/README.md) step 7.
+**GitOps**: the practice of using Git as the single source of truth for
+desired infrastructure/application state, with an automated controller
+(Argo CD here) continuously reconciling the live system to match. If
+you're used to imperative deploys (`kubectl apply`, `helm upgrade` run by
+a human or a CI job), the mental model flip is: you no longer *tell* the
+cluster what to do — you *declare* what should be true, and something else
+makes it true, continuously, forever, including reverting anything that
+drifts.
 
 ## Next
 

@@ -1,32 +1,39 @@
 # enterprise-app — Helm Umbrella Chart
 
-Bundles `frontend`, `backend`, and `mysql` into one release. Replaces
-Project 2's raw `kubernetes/` manifests.
+Bundles `frontend`, `backend`, and `mysql` into one release. Since
+project-04, this chart is deployed by **Argo CD**, not by Jenkins or a
+human running `helm install` directly — see
+[`/gitops/README.md`](../../gitops/README.md) for the full flow. Everything
+below still works for local testing/chart development; it's just no
+longer what actually deploys to the shared cluster.
 
 ## Structure
 
 ```
 enterprise-app/
 ├── Chart.yaml
-├── values.yaml              Umbrella defaults - overrides subchart values by key
-├── values-prod.yaml.example Example production overlay (see comments inside)
+├── values.yaml               Umbrella defaults - overrides subchart values by key
+├── values-images/
+│   ├── backend.yaml           Jenkins-managed image tag, Argo CD-watched (see gitops/README.md)
+│   └── frontend.yaml          Jenkins-managed image tag, Argo CD-watched
+├── values-prod.yaml.example  Example production overlay (see comments inside)
 ├── templates/
 │   ├── _helpers.tpl
-│   ├── ingress.yaml          Routes /api -> backend, / -> frontend
-│   └── NOTES.txt             Printed after install/upgrade
+│   ├── ingress.yaml           Routes /api -> backend, / -> frontend
+│   └── NOTES.txt              Printed after install/upgrade
 └── charts/
-    ├── frontend/              Deployment, Service, optional HPA
-    ├── backend/               Deployment, Service, ConfigMap, HPA
-    └── mysql/                 Deployment, PVC, Service
+    ├── frontend/               Deployment, Service, optional HPA
+    ├── backend/                Deployment, Service, ConfigMap, HPA
+    └── mysql/                  Deployment, PVC, Service
 ```
 
 No `helm dependency update` step is needed — `frontend/`, `backend/`, and
 `mysql/` are plain chart directories under `charts/`, which Helm loads
-automatically as subcharts. That mechanism (`dependencies:` +
-`helm dependency update`) is only for subcharts pulled from a chart
-repository or packaged as `.tgz`.
+automatically as subcharts. `Chart.yaml`'s `dependencies:` block declares
+them anyway because `helm lint` otherwise flags undeclared subchart
+dependencies as an error.
 
-## Secrets — create these before the first install
+## Secrets — create these before the first sync
 
 ```bash
 kubectl create namespace enterprise-devops --dry-run=client -o yaml | kubectl apply -f -
@@ -45,45 +52,45 @@ kubectl create secret generic mysql-secret -n enterprise-devops \
 
 The chart references these by name (`existingSecret` in each subchart's
 `values.yaml`) — it never creates or templates Secret objects itself, so
-real credentials never pass through `helm template`/`helm install` output
-or `helm get values`.
+real credentials never pass through `helm template`, Argo CD's rendered
+manifest diff, or `helm get values`.
 
-## Install
+## How a deploy actually happens now
+
+Neither Jenkinsfile runs `helm install`/`helm upgrade` anymore. Instead:
+1. `scripts/update-image-tag.sh <service> <tag>` edits
+   `values-images/<service>.yaml` and pushes the commit
+2. Argo CD (watching this repo — see
+   `gitops/applications/enterprise-app.yaml`) detects the change and runs
+   the equivalent of `helm template` + `kubectl apply` itself
+
+## Manual/local use (chart development, not the live cluster)
 
 ```bash
+# Install standalone, e.g. into a throwaway namespace for chart development:
 helm install enterprise-app helm/enterprise-app -n enterprise-devops --create-namespace
-```
 
-## Upgrade a single service (what the split Jenkinsfiles actually do)
-
-```bash
-# after backend/Jenkinsfile builds and pushes a new backend image:
+# Bump one service's tag by hand (fights Argo CD's selfHeal if run against
+# a cluster Argo CD manages - see scripts/helm-upgrade-backend.sh's header):
 helm upgrade enterprise-app helm/enterprise-app -n enterprise-devops \
   --reuse-values --set backend.image.tag=<build-number>
 
-# after frontend/Jenkinsfile builds and pushes a new frontend image:
-helm upgrade enterprise-app helm/enterprise-app -n enterprise-devops \
-  --reuse-values --set frontend.image.tag=<build-number>
-```
-
-`--reuse-values` is what makes this safe for independent pipelines: the
-backend pipeline's upgrade doesn't need to know (or accidentally reset)
-whatever image tag the frontend pipeline last set, and vice versa.
-
-## Uninstall
-
-```bash
 helm uninstall enterprise-app -n enterprise-devops
 ```
 
 This does **not** delete the PVC (`mysql-pvc` survives by Kubernetes
-default so data isn't lost on an accidental uninstall) — remove it
-explicitly if you actually want to delete the data:
+default) — remove it explicitly if you want the data gone:
 `kubectl delete pvc mysql-pvc -n enterprise-devops`.
 
 ## Lint and render locally
 
 ```bash
 helm lint helm/enterprise-app
-helm template enterprise-app helm/enterprise-app -n enterprise-devops
+helm template enterprise-app helm/enterprise-app -n enterprise-devops \
+  -f helm/enterprise-app/values-images/backend.yaml \
+  -f helm/enterprise-app/values-images/frontend.yaml
 ```
+
+The `-f` flags reproduce exactly what Argo CD's `valueFiles` list renders
+(see `gitops/applications/enterprise-app.yaml`) — useful for previewing
+what a GitOps commit will actually change before pushing it.

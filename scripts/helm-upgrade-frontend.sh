@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# Local equivalent of frontend/Jenkinsfile's "Helm Upgrade" + "Verify" stages.
+# Carried over from project-03 for local chart testing (e.g. against a
+# throwaway namespace/cluster) ONLY. Since project-04, frontend/Jenkinsfile
+# no longer runs this - it uses scripts/update-image-tag.sh + a Git commit
+# instead. Running this directly against a cluster where Argo CD manages
+# the `enterprise-app` Application will fight with it: `selfHeal: true`
+# (see gitops/applications/enterprise-app.yaml) reverts this change back
+# to whatever's in Git within minutes. Use scripts/update-image-tag.sh if
+# you want a change to actually stick.
 # Usage: ./scripts/helm-upgrade-frontend.sh <image-tag>
 set -euo pipefail
 

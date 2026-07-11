@@ -1,0 +1,11 @@
+# Managed by backend/Jenkinsfile's "Update GitOps Values" stage - not
+# hand-edited. Every backend pipeline run rewrites the `tag:` line below
+# and commits it; Argo CD watches this file (see gitops/applications/
+# enterprise-app.yaml) and syncs the change to the cluster automatically.
+#
+# Deliberately its own file, separate from frontend.yaml, so the backend
+# and frontend pipelines never touch the same file and can never git-push
+# conflict with each other.
+backend:
+  image:
+    tag: latest

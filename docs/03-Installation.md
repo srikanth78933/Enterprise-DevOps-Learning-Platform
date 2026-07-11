@@ -1,18 +1,39 @@
-# Installation — Project 3: CI/CD with Helm & Independent Pipelines
+# Installation — Project 4: GitOps with Argo CD
 
-Assumes you already have a running EKS cluster with the NGINX Ingress
-Controller and Metrics Server installed (Project 2). If not, do that
-first — nothing in `terraform/` changed.
+Assumes Project 3's cluster (EKS + Ingress Controller + Metrics Server) is
+already up. If you still have Project 3's manual `helm install` release
+running, that's fine — Argo CD will adopt it.
 
-## 1. Install Helm locally (if you haven't already)
+## 1. Install Argo CD
 
 ```bash
-curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-chmod +x get_helm.sh && ./get_helm.sh
-helm version
+./scripts/argocd-install.sh
 ```
 
-## 2. Create the secrets (same as Project 2, if not already done)
+Note the admin password it prints. Port-forward and log in to confirm it
+came up:
+
+```bash
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+# in another terminal / browser:
+open https://localhost:8080
+```
+
+## 2. Point the Application at your fork
+
+Edit `repoURL` in both:
+- `gitops/projects/enterprise-devops-project.yaml`
+- `gitops/applications/enterprise-app.yaml`
+
+to your actual fork's URL (they default to this tutorial's origin repo).
+
+## 3. Bootstrap the AppProject and Application
+
+```bash
+./scripts/argocd-bootstrap.sh
+```
+
+## 4. Create the secrets (same as Project 3, if not already done)
 
 ```bash
 kubectl create namespace enterprise-devops --dry-run=client -o yaml | kubectl apply -f -
@@ -29,34 +50,23 @@ kubectl create secret generic mysql-secret -n enterprise-devops \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-## 3. Lint and render the chart before installing
+## 5. Watch the first sync happen
 
 ```bash
-helm lint helm/enterprise-app
-helm template enterprise-app helm/enterprise-app -n enterprise-devops | less
+kubectl get application enterprise-app -n argocd -w
 ```
 
-## 4. Install
-
-```bash
-./scripts/helm-install.sh
-```
-
-Or manually: `helm upgrade --install enterprise-app helm/enterprise-app -n
-enterprise-devops --create-namespace --wait --timeout 5m`
-
-## 5. Verify
+Wait for `SYNC STATUS: Synced` and `HEALTH STATUS: Healthy`. Then:
 
 ```bash
 kubectl get pods,svc,hpa,ingress -n enterprise-devops
-./scripts/verify-backend.sh
-./scripts/verify-frontend.sh
 ```
 
-## 6. Set up the two Jenkins pipeline jobs
+## 6. Set up Jenkins for GitOps
 
-Follow [`jenkins/README.md`](../jenkins/README.md) steps 1-11 (steps 7 and
-11 are new in this project — two jobs, not one).
+Follow [`jenkins/README.md`](../jenkins/README.md) steps 7-12 (new vs.
+Project 3): scanning tools, Git write-back credentials, Argo CD CLI + auth
+token, and the two pipeline jobs pointed at this branch.
 
 ## Next
 
