@@ -1,7 +1,11 @@
 # CI/CD Pipeline Diagram — Project 2
 
-Extends Project 1's pipeline (Checkout through Package Jar are unchanged)
-with a real deployment to EKS.
+Extends Project 1's pipeline (Checkout through Push Docker Image are
+unchanged) with a real deployment to EKS.
+
+Rendered view (source is the Mermaid below, in case you want to edit it):
+
+![Project 2 Pipeline — Detailed Sequential View](./project-2-pipeline-detailed.png)
 
 ```mermaid
 flowchart TD
@@ -42,23 +46,50 @@ flowchart TD
     end
 ```
 
-## Deploy stage detail
+## Stage-by-stage detail
 
 ```mermaid
 sequenceDiagram
+    participant Dev as Developer
+    participant GH as GitHub Repo
     participant J as Jenkins
+    participant SQ as SonarQube
+    participant NX as Nexus
+    participant DH as Docker Hub
     participant AWS as AWS STS/EKS
     participant K8s as EKS API Server
-    participant DH as Docker Hub
 
-    J->>AWS: aws eks update-kubeconfig
-    AWS-->>J: kubeconfig with cluster endpoint + CA cert
-    J->>K8s: kubectl apply -k kubernetes/ (baseline: namespace, configmap, PVC, services, HPA, ingress)
-    K8s-->>J: resources created/unchanged
-    J->>K8s: kubectl set image deployment/backend backend=<image>:<build-tag>
-    K8s->>DH: pull new image (rolling update, one pod at a time)
-    K8s-->>J: rollout status: successfully rolled out
-    J->>J: scripts/verify-deployment.sh (curl /api/health through Ingress)
+    Dev->>GH: git push
+    GH-->>J: webhook / poll triggers build
+    J->>J: Checkout
+    J->>J: Maven Build (compile + versions:set stamps 1.0.0-<build#>)
+    J->>J: Unit Test (mvn test - JUnit + JaCoCo)
+    J->>SQ: mvn sonar:sonar (submit analysis)
+    SQ-->>J: webhook callback with Quality Gate result
+    alt Quality Gate failed
+        J-->>Dev: Build marked FAILURE, pipeline aborted
+    else Quality Gate passed
+        par Parallel Stage
+            J->>J: Publish JaCoCo coverage report
+        and
+            J->>J: mvn dependency:tree audit
+        end
+        J->>J: mvn package -DskipTests (jar archived)
+        J->>NX: mvn deploy (immutable versioned artifact)
+        NX-->>J: artifact stored (maven-releases)
+        J->>J: docker build -f backend-ci.Dockerfile
+        J->>DH: docker push (versioned tag + latest)
+        DH-->>J: push acknowledged
+        J->>AWS: aws eks update-kubeconfig --name eks-cluster --region eu-west-3
+        AWS-->>J: kubeconfig with cluster endpoint + CA cert
+        J->>K8s: kubectl apply -k kubernetes/ (baseline: namespace, configmap, PVC, services, HPA, ingress)
+        K8s-->>J: resources created/unchanged
+        J->>K8s: kubectl set image deployment/backend backend=<image>:<build-tag>
+        K8s->>DH: pull new image (rolling update, one pod at a time)
+        K8s-->>J: rollout status: successfully rolled out
+        J->>J: scripts/verify-deployment.sh (curl /api/health through Ingress)
+        J-->>Dev: Build marked SUCCESS
+    end
 ```
 
 Why `kubectl apply -k` runs *before* `kubectl set image`: the baseline
