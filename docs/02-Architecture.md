@@ -3,6 +3,8 @@
 Full detail lives in [`/architecture`](../architecture/README.md) — this
 page is the short version.
 
+![Project 1 Architecture](../architecture/project-1-architecture.jpg)
+
 The application architecture is unchanged from `main`
 ([`/diagrams/application-architecture.md`](../diagrams/application-architecture.md)).
 What's added here sits entirely *around* the app:

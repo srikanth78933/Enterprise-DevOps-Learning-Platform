@@ -4,6 +4,8 @@ This project adds a Continuous Integration pipeline in front of the base
 application from `main`. No application code changes — the backend is
 identical to `main`; only build/quality/packaging automation is new.
 
+![Project 1 Architecture](./project-1-architecture.jpg)
+
 See [`pipeline-diagram.md`](./pipeline-diagram.md) for the full Mermaid
 flow diagram of every Jenkinsfile stage.
 
