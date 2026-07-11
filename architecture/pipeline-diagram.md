@@ -1,7 +1,7 @@
 # CI/CD Pipeline Diagram — Project 2
 
 Extends Project 1's pipeline (Checkout through Package Jar are unchanged)
-with a frontend build, a second Docker image, and a real deployment to EKS.
+with a real deployment to EKS.
 
 ```mermaid
 flowchart TD
@@ -20,17 +20,9 @@ flowchart TD
     end
 
     G --> H[Package Jar]
-    H --> I[Frontend Build<br/>npm ci / test / build]
-    I --> J[Docker Build]
-
-    subgraph J[Docker Build]
-        direction LR
-        J1[Backend Image]
-        J2[Frontend Image]
-    end
-
-    J --> K[Push Docker Images<br/>backend + frontend, x2 tags each]
-    K --> L[Deploy to EKS]
+    H --> I[Docker Build]
+    I --> J[Push Docker Image]
+    J --> L[Deploy to EKS]
     L --> M[Verify]
     M --> N[Pipeline success]
 
@@ -38,16 +30,15 @@ flowchart TD
         direction TB
         L1[aws eks update-kubeconfig]
         L2[kubectl apply -k kubernetes/]
-        L3[kubectl set image backend + frontend]
+        L3[kubectl set image backend]
         L1 --> L2 --> L3
     end
 
     subgraph M[Verify]
         direction TB
         M1[kubectl rollout status backend]
-        M2[kubectl rollout status frontend]
-        M3[scripts/verify-deployment.sh<br/>curl through the Ingress]
-        M1 --> M2 --> M3
+        M2[scripts/verify-deployment.sh<br/>curl through the Ingress]
+        M1 --> M2
     end
 ```
 
@@ -65,10 +56,9 @@ sequenceDiagram
     J->>K8s: kubectl apply -k kubernetes/ (baseline: namespace, configmap, PVC, services, HPA, ingress)
     K8s-->>J: resources created/unchanged
     J->>K8s: kubectl set image deployment/backend backend=<image>:<build-tag>
-    J->>K8s: kubectl set image deployment/frontend frontend=<image>:<build-tag>
     K8s->>DH: pull new image (rolling update, one pod at a time)
     K8s-->>J: rollout status: successfully rolled out
-    J->>J: scripts/verify-deployment.sh (curl /actuator/health through Ingress)
+    J->>J: scripts/verify-deployment.sh (curl /api/health through Ingress)
 ```
 
 Why `kubectl apply -k` runs *before* `kubectl set image`: the baseline

@@ -3,19 +3,18 @@
 Full detail lives in [`/architecture`](../architecture/README.md) — this
 page is the short version.
 
-## Infrastructure layers
+## Infrastructure layer
 
-```
-terraform/modules/vpc/   → VPC, public/private subnets, IGW, NAT Gateway
-terraform/modules/iam/   → EKS cluster role, node group role
-terraform/modules/eks/   → EKS control plane, managed node group, OIDC provider
-terraform/main.tf        → wires the three modules together
-```
-
-See [`architecture/aws-infrastructure.md`](../architecture/aws-infrastructure.md)
-for the full topology diagram.
+There's no Terraform in this branch — the VPC, IAM roles, and EKS cluster
+(control plane + managed node group) already exist, provisioned and
+managed outside this repo. This project only needs `kubectl`/`aws` CLI
+access to that cluster (see `docs/01-Prerequisites.md`); it doesn't
+provision or own the infrastructure underneath it.
 
 ## Application layer (unchanged code, new deployment target)
+
+Backend only — see `architecture/README.md` for why frontend isn't
+deployed on this branch (`frontend/` source is untouched for local dev).
 
 ```
 kubernetes/namespace.yaml           → enterprise-devops namespace
@@ -25,15 +24,14 @@ kubernetes/mysql-deployment.yaml    → single-replica MySQL + PVC
 kubernetes/backend-deployment.yaml  → 2 replicas, Actuator readiness/liveness probes
 kubernetes/backend-hpa.yaml         → scales 2-6 replicas on CPU/memory
 kubernetes/backend-vpa.yaml         → recommendation-only, optional
-kubernetes/frontend-deployment.yaml → 2 replicas, NGINX-served static build
-kubernetes/ingress.yaml             → routes /api to backend, / to frontend
+kubernetes/ingress.yaml             → routes all paths to backend
 ```
 
 ## Pipeline layer
 
-The Jenkinsfile from Project 1 gains five stages: **Frontend Build**,
-**Docker Build** (now parallel, backend + frontend), **Push Docker Images**
-(x2), **Deploy to EKS**, **Verify**. Full diagram:
+The Jenkinsfile from Project 1 gains two stages: **Deploy to EKS** and
+**Verify** (Docker Build/Push Docker Image already existed in Project 1).
+Full diagram:
 [`architecture/pipeline-diagram.md`](../architecture/pipeline-diagram.md).
 
 ## Next

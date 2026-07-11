@@ -9,17 +9,19 @@ healthy:
 kubectl get pods -n enterprise-devops
 ```
 
-Expect: 1 `mysql-*` pod, 2 `backend-*` pods, 2 `frontend-*` pods, all
-`Running` and `1/1 Ready`.
+Expect: 1 `mysql-*` pod, 2 `backend-*` pods, all `Running` and `1/1 Ready`.
 
-## 2. Exercise the app through the Ingress
+## 2. Exercise the API through the Ingress
 
-Using the load balancer hostname from step 3 of Installation, open
-`http://<lb-hostname>/` with a browser plugin or `curl -H "Host: ..."` (real
-DNS isn't configured for the placeholder `enterprise-devops.example.com`
-host used in `ingress.yaml`) and walk through the same CRUD flow as
-`main`'s `docs/04-Step-by-Step.md` — create a department, an employee, a
-project.
+Using the load balancer hostname from step 3 of Installation, hit the API
+with `curl -H "Host: ..."` (real DNS isn't configured for the placeholder
+`enterprise-devops.example.com` host used in `ingress.yaml`) and walk
+through the same CRUD flow as `main`'s `docs/04-Step-by-Step.md` — create
+a department, an employee, a project:
+
+```bash
+curl -H "Host: enterprise-devops.example.com" http://<lb-hostname>/api/departments
+```
 
 ## 3. Watch the HPA under load
 

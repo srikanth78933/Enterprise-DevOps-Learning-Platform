@@ -1,30 +1,23 @@
 # Installation — Project 2: CD to AWS EKS
 
-## 1. Provision the infrastructure
+## 1. Point kubectl at the existing cluster
 
 ```bash
-./scripts/terraform-init-apply.sh
-```
-
-Review the plan carefully before confirming — this creates real AWS
-resources. Takes 10-15 minutes (EKS control plane provisioning is slow).
-
-## 2. Point kubectl at the new cluster
-
-```bash
+export EKS_CLUSTER_NAME=eks-cluster   # or your cluster's actual name
+export AWS_REGION=eu-west-3           # or your cluster's actual region
 ./scripts/configure-kubeconfig.sh
 kubectl get nodes
 ```
 
-You should see 2 nodes in `Ready` state.
+You should see your worker nodes in `Ready` state.
 
-## 3. Enable the Metrics Server (required for HPA)
+## 2. Enable the Metrics Server (required for HPA)
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 ```
 
-## 4. Install the NGINX Ingress Controller (required for Ingress)
+## 3. Install the NGINX Ingress Controller (required for Ingress)
 
 ```bash
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
@@ -40,7 +33,7 @@ address:
 kubectl get svc -n ingress-nginx ingress-nginx-controller -w
 ```
 
-## 5. Create the real secrets (never commit these)
+## 4. Create the real secrets (never commit these)
 
 ```bash
 kubectl create namespace enterprise-devops --dry-run=client -o yaml | kubectl apply -f -
@@ -57,7 +50,7 @@ kubectl create secret generic mysql-secret -n enterprise-devops \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-## 6. Deploy the application
+## 5. Deploy the application
 
 Either manually:
 
@@ -68,7 +61,7 @@ Either manually:
 ...or extend your Project 1 Jenkins setup per [`jenkins/README.md`](../jenkins/README.md)
 (steps 8-10 are new) and trigger the pipeline job pointed at this branch.
 
-## 7. Verify
+## 6. Verify
 
 ```bash
 ./scripts/verify-deployment.sh
@@ -79,7 +72,6 @@ Or manually, once you have the Ingress load balancer's hostname
 
 ```bash
 curl -H "Host: enterprise-devops.example.com" http://<lb-hostname>/api/health
-curl -H "Host: enterprise-devops.example.com" http://<lb-hostname>/
 ```
 
 ## Next

@@ -6,23 +6,19 @@ Full diagrams: [`/architecture/pipeline-diagram.md`](../architecture/pipeline-di
 
 | Stage | Command | Fails the build if... |
 |---|---|---|
-| Frontend Build | `npm ci && npm test && npm run build` | Jest tests fail or the build errors |
-| Docker Build (parallel) | `docker build` x2 | Either Dockerfile fails |
-| Push Docker Images | `docker push` x4 (2 tags x 2 images) | Docker Hub auth/network failure |
-| Deploy to EKS | `aws eks update-kubeconfig` → `kubectl apply -k` → `kubectl set image` x2 | AWS auth failure, cluster unreachable, invalid manifest |
-| Verify | `kubectl rollout status` x2, then `scripts/verify-deployment.sh` | Rollout doesn't complete in 180s, or the smoke test curl fails |
+| Docker Build | `docker build` | Dockerfile fails |
+| Push Docker Image | `docker push` (x2 tags) | Docker Hub auth/network failure |
+| Deploy to EKS | `aws eks update-kubeconfig` → `kubectl apply -k` → `kubectl set image` | AWS auth failure, cluster unreachable, invalid manifest |
+| Verify | `kubectl rollout status`, then `scripts/verify-deployment.sh` | Rollout doesn't complete in 180s, or the smoke test curl fails |
 
-## Why both images share one tag
+## Why the image tag includes the release version
 
-`IMAGE_TAG` is no longer just `${BUILD_NUMBER}` — the Maven Build stage
-now reads the backend's `pom.xml` version and appends the build number
-(e.g. `1.0.0-42`), the same technique used in
-`project-01-ci-pipeline`'s Jenkinsfile. Backend and frontend are always
-built and deployed together in this pipeline (one "Deploy to EKS" stage
-sets both), so they share this single tag rather than each tracking a
-separate version — a build number alone traces back to a Jenkins run,
-but pairing it with the actual release version makes the tag meaningful
-on its own, e.g. in `docker images` or a rollback command.
+`IMAGE_TAG` is the backend's `pom.xml` version plus the Jenkins build
+number (e.g. `1.0.0-42`), the same technique used in
+`project-01-ci-pipeline`'s Jenkinsfile — a build number alone traces back
+to a Jenkins run, but pairing it with the actual release version makes
+the tag meaningful on its own, e.g. in `docker images` or a rollback
+command.
 
 ## Why `kubectl apply -k` then `kubectl set image` (not one step)
 
@@ -30,17 +26,17 @@ on its own, e.g. in `docker images` or a rollback command.
 reconciles the *shape* of the cluster (namespace exists, configmap is
 current, services/HPA/ingress exist) but the `images:` block in
 `kustomization.yaml` only pins a fallback tag (`latest`). `kubectl set
-image` then does one focused, auditable thing: point the two Deployments
-at this specific build's images. Splitting these means a manifest change
+image` then does one focused, auditable thing: point the Deployment at
+this specific build's image. Splitting these means a manifest change
 (e.g. adjusting HPA thresholds) and an image bump are always independently
 diagnosable in `kubectl rollout history`.
 
 ## Rolling update mechanics
 
-Neither Deployment manifest sets a custom `strategy` for backend/frontend,
-so both use Kubernetes' default `RollingUpdate` (`maxUnavailable: 25%,
-maxSurge: 25%`). Combined with the `readinessProbe` on both, this is what
-makes the zero-downtime behavior in `docs/04-Step-by-Step.md` step 5 work:
+The backend Deployment manifest doesn't set a custom `strategy`, so it
+uses Kubernetes' default `RollingUpdate` (`maxUnavailable: 25%, maxSurge:
+25%`). Combined with its `readinessProbe`, this is what makes the
+zero-downtime behavior in `docs/04-Step-by-Step.md` step 5 work:
 Kubernetes won't route traffic to a new pod, or terminate an old one, until
 the readiness probe says so.
 
@@ -53,7 +49,7 @@ sequenceDiagram
     participant AWS as AWS STS
     participant EKS as EKS API Server
 
-    JF->>JC: credentials('aws-access-key-id' / 'aws-secret-access-key')
+    JF->>JC: credentials('AWS_ACCESS_KEY_ID' / 'AWS_SECRET_ACCESS_KEY')
     JC-->>JF: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (masked in logs)
     JF->>AWS: aws eks update-kubeconfig (uses env credentials implicitly)
     AWS-->>JF: kubeconfig for the cluster

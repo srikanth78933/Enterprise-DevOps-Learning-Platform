@@ -1,7 +1,6 @@
 # The Jenkins "Deploy to EKS" stage (see scripts/deploy-to-eks.sh) does two things:
 #   1. kubectl apply -k kubernetes/          - baseline apply, uses `images:` below
 #   2. kubectl set image deployment/backend backend=<image>:<build-tag> -n enterprise-devops
-#      kubectl set image deployment/frontend frontend=<image>:<build-tag> -n enterprise-devops
 #
 # Step 2 bumps to this specific build's tag without needing the standalone
 # kustomize CLI - `kubectl apply -k` already understands this file natively.
@@ -21,11 +20,8 @@ resources:
   - mysql-deployment.yaml
   - backend-deployment.yaml
   - backend-hpa.yaml
-  - frontend-deployment.yaml
   - ingress.yaml
 
 images:
   - name: yourdockerhubuser/enterprise-devops-backend
-    newTag: latest
-  - name: yourdockerhubuser/enterprise-devops-frontend
     newTag: latest

@@ -59,11 +59,10 @@ docker run -d --name jenkins \
 (Also install the `docker` CLI binary inside that same Jenkins container —
 the Jenkins image does not ship it by default.)
 
-## 6. Update the image names
+## 6. Update the image name
 
-Edit `BACKEND_IMAGE` and `FRONTEND_IMAGE` at the top of the root
-`Jenkinsfile` to your own Docker Hub namespace before running the pipeline
-against a real registry.
+Edit `BACKEND_IMAGE` at the top of the root `Jenkinsfile` to your own
+Docker Hub namespace before running the pipeline against a real registry.
 
 ## 7. Create the pipeline job
 
@@ -76,13 +75,13 @@ Provision an IAM user (or better, a role your Jenkins host can assume) with
 permissions to call `eks:DescribeCluster` and to manage the EKS cluster's
 Kubernetes RBAC (the IAM identity running `aws eks update-kubeconfig` must
 also be mapped to a Kubernetes RBAC role — by default, whichever identity
-created the cluster via Terraform already has `system:masters`; grant others
-access via the `aws-auth` ConfigMap if needed).
+created the cluster already has `system:masters`; grant others access via
+the `aws-auth` ConfigMap if needed).
 
 Manage Jenkins → Credentials → add two "Secret text" credentials:
 
-- ID: `aws-access-key-id` — value: the IAM user's access key ID
-- ID: `aws-secret-access-key` — value: the IAM user's secret access key
+- ID: `AWS_ACCESS_KEY_ID` — value: the IAM user's access key ID
+- ID: `AWS_SECRET_ACCESS_KEY` — value: the IAM user's secret access key
 
 (A minimal setup for learning. Production setups should use short-lived
 STS credentials via an OIDC-federated Jenkins identity instead of a static
@@ -101,10 +100,9 @@ unzip awscliv2.zip && ./aws/install
 
 ## 10. Update cluster/region constants
 
-If you changed `project_name`, `environment`, or `aws_region` in
-`terraform/terraform.tfvars` from their defaults, update `EKS_CLUSTER_NAME`
-and `AWS_REGION` at the top of the Jenkinsfile to match — they must be the
-exact `cluster_name` Terraform output value.
+`EKS_CLUSTER_NAME` and `AWS_REGION` at the top of the Jenkinsfile must
+match your existing cluster's actual name and region exactly — check the
+AWS Console or `aws eks list-clusters --region <region>` if you're unsure.
 
 ## Maven settings.xml
 

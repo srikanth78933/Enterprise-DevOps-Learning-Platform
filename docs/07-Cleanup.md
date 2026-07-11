@@ -1,7 +1,8 @@
 # Cleanup — Project 2: CD to AWS EKS
 
-Order matters — Kubernetes-created load balancers must go before the
-cluster that hosts their controller does.
+The cluster itself is managed outside this repo, so cleanup here only
+covers what this project created *on* it — the application and any
+Kubernetes-provisioned AWS resources (Load Balancers).
 
 ## 1. Remove the Ingress and Ingress Controller first
 
@@ -21,30 +22,20 @@ kubectl delete -k kubernetes/
 kubectl delete secret backend-secret mysql-secret -n enterprise-devops
 ```
 
-## 3. Destroy the AWS infrastructure
+## 3. Confirm nothing billable is left behind
 
-```bash
-./scripts/terraform-destroy.sh
-```
+AWS Console, check for orphans in:
 
-This checks for lingering Ingress resources and warns you before
-proceeding — confirm you actually completed steps 1-2 first.
+- EC2 → Load Balancers (should have nothing tied to `enterprise-devops`)
+- EC2 → Elastic IPs (should have nothing tied to a Load Balancer you just deleted)
 
-## 4. Confirm nothing billable is left
+(The EKS cluster and its node group are expected to still be there — this
+project doesn't own or manage them.)
 
-AWS Console, check for orphans in each of:
-
-- EC2 → Load Balancers (should be empty)
-- EC2 → Elastic IPs (should be empty — the NAT Gateway's EIP releases with
-  the NAT Gateway, but confirm)
-- EKS → Clusters (should be empty)
-- VPC → Your VPCs (the `enterprise-devops-dev-vpc` should be gone)
-
-## 5. Local cleanup
+## 4. Local cleanup
 
 ```bash
 rm -rf backend/target frontend/build frontend/node_modules
-rm -f terraform/tfplan terraform/terraform.tfstate*
 ```
 
 ## Next

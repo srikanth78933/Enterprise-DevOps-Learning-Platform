@@ -1,15 +1,15 @@
 // Project 2 - CD to AWS EKS
 //
 // Flow: Git -> Jenkins -> Checkout -> Maven Build -> Unit Test -> SonarQube
-//       -> Quality Gate -> Parallel Stage -> Package Jar -> Frontend Build
-//       -> Docker Build (backend + frontend) -> Push Docker Images
-//       -> Deploy to EKS -> Verify
+//       -> Quality Gate -> Parallel Stage -> Package Jar -> Docker Build
+//       -> Push Docker Image -> Deploy to EKS -> Verify
 //
-// New in this project vs. project-01-ci-pipeline: the pipeline now also
-// builds/tests the frontend, builds and pushes a second image, and deploys
-// both to a Terraform-provisioned EKS cluster. See jenkins/README.md for
-// the additional one-time setup (AWS credentials, kubectl/aws CLI on the
-// agent) this project requires on top of project 1's.
+// New in this project vs. project-01-ci-pipeline: the pipeline now deploys
+// the backend to an existing EKS cluster (provisioned and managed outside
+// this repo). See jenkins/README.md for the additional one-time setup (AWS
+// credentials, kubectl/aws CLI on the agent) this project requires on top
+// of project 1's. (Frontend build/deploy isn't part of this branch - see
+// architecture/README.md for why.)
 
 pipeline {
     agent any
@@ -38,7 +38,6 @@ pipeline {
 
         // Replace with your own Docker Hub namespace before running against a real registry.
         BACKEND_IMAGE   = 'yourdockerhubuser/enterprise-devops-backend'
-        FRONTEND_IMAGE  = 'yourdockerhubuser/enterprise-devops-frontend'
     }
 
     stages {
@@ -53,11 +52,10 @@ pipeline {
             steps {
                 dir('backend') {
                     script {
-                        // Backend and frontend always deploy together as one release
-                        // unit (see "Deploy to EKS"), so both images share a single
-                        // tag: the backend's pom.xml version plus the Jenkins build
-                        // number. Traceable back to the exact build, same idea as
-                        // project-01-ci-pipeline's Jenkinsfile.
+                        // IMAGE_TAG is the backend's pom.xml version plus the Jenkins
+                        // build number, e.g. 1.0.0-42 - same technique as
+                        // project-01-ci-pipeline's Jenkinsfile, so the Docker tag is
+                        // always traceable back to the exact build that produced it.
                         def devVersion = sh(
                             script: "mvn -B -ntp -q -DforceStdout help:evaluate -Dexpression=project.version",
                             returnStdout: true
@@ -132,46 +130,22 @@ pipeline {
             }
         }
 
-        stage('Frontend Build') {
-            steps {
-                dir('frontend') {
-                    sh 'npm ci'
-                    sh 'CI=true npm test'
-                    sh 'CI=true npm run build'
-                }
-            }
-        }
-
         stage('Docker Build') {
-            parallel {
-                stage('Backend Image') {
-                    steps {
-                        sh """
-                            docker build -f docker/backend-ci.Dockerfile \
-                                -t ${BACKEND_IMAGE}:${IMAGE_TAG} -t ${BACKEND_IMAGE}:latest .
-                        """
-                    }
-                }
-                stage('Frontend Image') {
-                    steps {
-                        sh """
-                            docker build -f docker/frontend-ci.Dockerfile \
-                                -t ${FRONTEND_IMAGE}:${IMAGE_TAG} -t ${FRONTEND_IMAGE}:latest .
-                        """
-                    }
-                }
+            steps {
+                sh """
+                    docker build -f docker/backend-ci.Dockerfile \
+                        -t ${BACKEND_IMAGE}:${IMAGE_TAG} -t ${BACKEND_IMAGE}:latest .
+                """
             }
         }
 
-        stage('Push Docker Images') {
+        stage('Push Docker Image') {
             steps {
                 sh '''
                     echo "$DOCKERHUB_CREDENTIALS_PSW" | docker login -u "$DOCKERHUB_CREDENTIALS_USR" --password-stdin
                 '''
                 sh "docker push ${BACKEND_IMAGE}:${IMAGE_TAG}"
                 sh "docker push ${BACKEND_IMAGE}:latest"
-                sh "docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}"
-                sh "docker push ${FRONTEND_IMAGE}:latest"
                 sh 'docker logout'
             }
         }
@@ -185,8 +159,6 @@ pipeline {
 
                     kubectl set image deployment/backend backend=${BACKEND_IMAGE}:${IMAGE_TAG} \
                         -n ${K8S_NAMESPACE}
-                    kubectl set image deployment/frontend frontend=${FRONTEND_IMAGE}:${IMAGE_TAG} \
-                        -n ${K8S_NAMESPACE}
                 """
             }
         }
@@ -195,7 +167,6 @@ pipeline {
             steps {
                 sh """
                     kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=180s
-                    kubectl rollout status deployment/frontend -n ${K8S_NAMESPACE} --timeout=180s
                 """
                 script {
                     sh './scripts/verify-deployment.sh'
@@ -209,7 +180,7 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Deployed ${BACKEND_IMAGE}:${IMAGE_TAG} and ${FRONTEND_IMAGE}:${IMAGE_TAG} to ${EKS_CLUSTER_NAME}"
+            echo "Deployed ${BACKEND_IMAGE}:${IMAGE_TAG} to ${EKS_CLUSTER_NAME}"
         }
         failure {
             echo 'Pipeline failed - see docs/06-Troubleshooting.md for common causes.'

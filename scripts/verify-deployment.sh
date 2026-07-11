@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Smoke-tests a deployment: confirms pods are Ready, then hits the backend
-# health endpoint and the frontend through the Ingress load balancer.
+# health endpoint through the Ingress load balancer.
 # Used by the Jenkinsfile "Verify" stage and safe to run manually.
 set -euo pipefail
 
@@ -39,10 +39,5 @@ echo "==> Verifying backend health via the Ingress (Host header, no DNS needed)"
 curl -sf -H "Host: ${INGRESS_HOST}" "http://${LB_ADDRESS}/api/health" | grep -q '"status":"UP"' \
   && echo "Backend OK" \
   || { echo "ERROR: backend health check failed" >&2; exit 1; }
-
-echo "==> Verifying frontend is served"
-curl -sf -H "Host: ${INGRESS_HOST}" "http://${LB_ADDRESS}/" | grep -qi '<div id="root">' \
-  && echo "Frontend OK" \
-  || { echo "ERROR: frontend check failed" >&2; exit 1; }
 
 echo "Verification passed."

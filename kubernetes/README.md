@@ -18,7 +18,6 @@ kubectl apply -f mysql-deployment.yaml
 kubectl rollout status deployment/mysql -n enterprise-devops
 kubectl apply -f backend-deployment.yaml
 kubectl apply -f backend-hpa.yaml
-kubectl apply -f frontend-deployment.yaml
 kubectl apply -f ingress.yaml
 ```
 
@@ -36,6 +35,5 @@ comments in that file before using it.
 | `backend-deployment.yaml` | Deployment, Service | 2 replicas, readiness/liveness on Actuator probe groups |
 | `backend-hpa.yaml` | HorizontalPodAutoscaler | CPU + memory based, requires Metrics Server |
 | `backend-vpa.yaml` | VerticalPodAutoscaler | Recommendation-only, requires separate VPA controller |
-| `frontend-deployment.yaml` | Deployment, Service | 2 replicas, NGINX-served static build |
-| `ingress.yaml` | Ingress | Routes `/api` → backend, `/` → frontend |
+| `ingress.yaml` | Ingress | Routes all paths → backend |
 | `kustomization.yaml` | Kustomization | Ties it together, exposes the `images:` transformer used by CI |

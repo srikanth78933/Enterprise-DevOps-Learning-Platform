@@ -6,9 +6,10 @@ metadata:
 data:
   SPRING_PROFILES_ACTIVE: "prod"
   DB_URL: "jdbc:mysql://mysql:3306/enterprise_devops?useSSL=false&allowPublicKeyRetrieval=true"
-  # Must match the public hostname browsers load the frontend from (see
-  # ingress.yaml) - not the internal service DNS name, since CORS checks
-  # the browser's origin, not where the request is proxied from.
+  # This branch doesn't deploy a frontend - set this to whatever origin
+  # actually calls the API (e.g. a frontend running elsewhere, or your
+  # local dev frontend's origin), not the internal service DNS name, since
+  # CORS checks the browser's origin, not where the request is proxied from.
   CORS_ALLOWED_ORIGINS: "http://enterprise-devops.example.com"
   SERVER_PORT: "8080"
 ---
