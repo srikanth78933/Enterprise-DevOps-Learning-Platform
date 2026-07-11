@@ -11,8 +11,7 @@ TAG="${1:?Usage: helm-upgrade-backend.sh <image-tag>}"
 helm upgrade --install "${RELEASE}" "${ROOT_DIR}/helm/enterprise-app" \
   -n "${NAMESPACE}" --create-namespace \
   --reuse-values \
-  --set backend.image.tag="${TAG}" \
-  --wait --timeout 5m
+  --set backend.image.tag="${TAG}"
 
 kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=180s
 "${ROOT_DIR}/scripts/verify-backend.sh"

@@ -103,8 +103,7 @@ pipeline {
                     helm upgrade --install ${HELM_RELEASE} helm/enterprise-app \
                         -n ${K8S_NAMESPACE} --create-namespace \
                         --reuse-values \
-                        --set frontend.image.tag=${IMAGE_TAG} \
-                        --wait --timeout 5m
+                        --set frontend.image.tag=${IMAGE_TAG}
                 """
             }
         }

@@ -22,13 +22,24 @@ The chart references `backend-secret`/`mysql-secret` by name
 (`existingSecret` in each subchart's values) but doesn't create them.
 Create them first — see `helm/enterprise-app/README.md`.
 
-## `helm upgrade --wait` times out
+## A single-service pipeline's `helm upgrade` times out even though that service is fine
 
-Same failure modes as Project 2's `kubectl rollout status` timing out
-(bad DB credentials, image pull errors, failing readiness probe) — check
-`kubectl describe pod` and `kubectl logs` for the specific pod. `--wait`
-just makes Helm itself block on the same rollout Project 2 waited on
-explicitly with `kubectl rollout status`.
+`helm upgrade --wait` blocks until **every** Deployment in the release is
+Ready, not just the one you `--set`. If the other service currently has a
+broken pod (e.g. `ImagePullBackOff` because its own pipeline has never
+successfully pushed an image yet), a backend-only or frontend-only
+upgrade will hang for the full `--timeout` waiting on a pod it never
+touched, then fail the whole build - even though the service it actually
+upgraded came up fine underneath. This is why `backend/Jenkinsfile` and
+`frontend/Jenkinsfile` don't pass `--wait` to `helm upgrade` at all; the
+`Verify` stage's `kubectl rollout status deployment/<service>` right
+after already does the correctly-scoped check for just that one service.
+(`scripts/helm-install.sh` is the one place `--wait` is still correct -
+a first-time install of the whole release should wait for everything.)
+
+If you hit this with a hand-run `helm upgrade`, check
+`kubectl get pods -n enterprise-devops` for the *other* service before
+assuming the one you just upgraded is broken.
 
 ## Two Jenkins jobs both try to deploy at once and one fails
 

@@ -161,8 +161,7 @@ pipeline {
                     helm upgrade --install ${HELM_RELEASE} helm/enterprise-app \
                         -n ${K8S_NAMESPACE} --create-namespace \
                         --reuse-values \
-                        --set backend.image.tag=${IMAGE_TAG} \
-                        --wait --timeout 5m
+                        --set backend.image.tag=${IMAGE_TAG}
                 """
             }
         }
