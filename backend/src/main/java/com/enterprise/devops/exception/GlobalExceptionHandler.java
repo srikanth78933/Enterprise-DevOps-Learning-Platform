@@ -1,6 +1,8 @@
 package com.enterprise.devops.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -14,12 +16,21 @@ import java.util.Map;
 /**
  * Central place for translating exceptions into the ApiError contract.
  * Keeps controllers free of try/catch noise.
+ *
+ * Logging levels are deliberate, not uniform: expected client errors
+ * (404, 400) log at WARN with no stack trace - they're normal traffic,
+ * not incidents. Only genuinely unexpected exceptions log at ERROR with
+ * a full stack trace, so Kibana's error-log dashboards (Project 5) stay
+ * signal, not noise.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
+        log.warn("resource_not_found uri={} message={}", request.getRequestURI(), ex.getMessage());
         ApiError error = new ApiError(
                 HttpStatus.NOT_FOUND.value(),
                 HttpStatus.NOT_FOUND.getReasonPhrase(),
@@ -35,6 +46,7 @@ public class GlobalExceptionHandler {
         for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
             fieldErrors.put(fieldError.getField(), fieldError.getDefaultMessage());
         }
+        log.warn("validation_failed uri={} fields={}", request.getRequestURI(), fieldErrors.keySet());
         ApiError error = new ApiError(
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
@@ -47,6 +59,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        log.warn("bad_request uri={} message={}", request.getRequestURI(), ex.getMessage());
         ApiError error = new ApiError(
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
@@ -58,6 +71,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleGeneric(Exception ex, HttpServletRequest request) {
+        log.error("unhandled_exception uri={}", request.getRequestURI(), ex);
         ApiError error = new ApiError(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),

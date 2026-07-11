@@ -1,0 +1,23 @@
+apiVersion: v2
+name: elk-stack
+description: >-
+  Centralized logging for the Enterprise DevOps Learning Platform -
+  Elasticsearch, Logstash, Filebeat, and Kibana as one Argo CD-managed
+  release, deployed independently of the enterprise-app release.
+type: application
+version: 1.0.0
+appVersion: "8.15.0"
+
+dependencies:
+  - name: elasticsearch
+    version: "1.0.0"
+    repository: "file://charts/elasticsearch"
+  - name: logstash
+    version: "1.0.0"
+    repository: "file://charts/logstash"
+  - name: filebeat
+    version: "1.0.0"
+    repository: "file://charts/filebeat"
+  - name: kibana
+    version: "1.0.0"
+    repository: "file://charts/kibana"

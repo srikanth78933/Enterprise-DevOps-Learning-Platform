@@ -20,10 +20,20 @@ spec:
   destinations:
     - namespace: enterprise-devops
       server: https://kubernetes.default.svc
+    # Project 5: the elk-stack Application deploys here.
+    - namespace: logging
+      server: https://kubernetes.default.svc
 
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
+    # Project 5: Filebeat's DaemonSet needs cluster-scoped read access to
+    # pods/namespaces/nodes for Kubernetes autodiscover - see
+    # logging/elk-stack/charts/filebeat/templates/rbac.yaml.
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRole
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRoleBinding
 
   namespaceResourceWhitelist:
     - group: "*"

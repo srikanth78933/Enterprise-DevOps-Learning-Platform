@@ -1,36 +1,43 @@
-# Prerequisites — Project 4: GitOps with Argo CD
+# Prerequisites — Project 5: Centralized Logging (ELK)
 
-Builds on Project 3's prerequisites (Helm, a running EKS cluster with
-Ingress Controller + Metrics Server — see `docs/01-Prerequisites.md` on
-`project-03-cicd-helm-microservices`). Additionally:
+Builds on Project 4's prerequisites (Argo CD, a running EKS cluster —
+see `docs/01-Prerequisites.md` on `project-04-gitops-argocd`). No new CLI
+tools required this project.
 
-| Tool | Minimum Version | Check |
+## Resource capacity check
+
+The ELK stack's combined resource *requests* (not limits):
+
+| Component | CPU request | Memory request |
 |---|---|---|
-| Argo CD CLI | 2.11+ | `argocd version --client` |
-| Trivy | 0.50+ | `trivy --version` |
-| Docker Scout CLI (optional) | latest | `docker scout version` |
+| Elasticsearch | 500m | 1.5Gi |
+| Logstash | 250m | 768Mi |
+| Filebeat (per node) | 100m | 128Mi |
+| Kibana | 250m | 512Mi |
 
-## What you need already in place
+On top of what `enterprise-app` already requests. Confirm your node group
+has room:
 
-- A running EKS cluster with the NGINX Ingress Controller and Metrics
-  Server (Project 2)
-- The `enterprise-app` Helm chart working via manual `helm install`
-  (Project 3) — confirm this before adding Argo CD on top, so you're not
-  debugging two new things at once
-- A GitHub Personal Access Token (fine-grained, `Contents: read/write`
-  scoped to this repo only) for Jenkins to commit GitOps value changes —
-  see `jenkins/README.md` step 8
+```bash
+kubectl describe nodes | grep -A5 "Allocated resources"
+```
 
-## New concept this project assumes no prior exposure to
+If you're on the `t3.medium` x 2 default from `terraform/terraform.tfvars.example`,
+you may need to bump `node_desired_size`/instance type before deploying
+this project — see `docs/06-Troubleshooting.md` if pods stay `Pending`.
 
-**GitOps**: the practice of using Git as the single source of truth for
-desired infrastructure/application state, with an automated controller
-(Argo CD here) continuously reconciling the live system to match. If
-you're used to imperative deploys (`kubectl apply`, `helm upgrade` run by
-a human or a CI job), the mental model flip is: you no longer *tell* the
-cluster what to do — you *declare* what should be true, and something else
-makes it true, continuously, forever, including reverting anything that
-drifts.
+## New concepts this project assumes no prior exposure to
+
+- **StatefulSet**: like a Deployment, but gives each pod a stable network
+  identity and its own PersistentVolumeClaim (via `volumeClaimTemplates`)
+  that survives pod rescheduling. Elasticsearch uses one here for the
+  first time in this repo — MySQL (Projects 2-4) deliberately used a
+  plain Deployment instead; see `logging/elk-stack/charts/elasticsearch/templates/statefulset.yaml`'s
+  comments for exactly why StatefulSet semantics matter here and didn't
+  for MySQL.
+- **DaemonSet**: runs exactly one pod per node, automatically, on every
+  node including ones added later. Filebeat needs this — it has to
+  observe every node's container logs, not just some of them.
 
 ## Next
 

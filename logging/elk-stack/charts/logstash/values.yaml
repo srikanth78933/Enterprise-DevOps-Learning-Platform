@@ -1,0 +1,23 @@
+image:
+  repository: docker.elastic.co/logstash/logstash
+  tag: "8.15.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 768Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+javaOpts: "-Xms512m -Xmx512m"
+
+elasticsearch:
+  host: "http://elasticsearch:9200"
+  indexPrefix: enterprise-devops-logs
+
+service:
+  beatsPort: 5044

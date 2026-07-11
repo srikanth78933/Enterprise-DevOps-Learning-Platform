@@ -1,0 +1,26 @@
+# Umbrella defaults - overrides subchart values by key, same pattern as
+# helm/enterprise-app/values.yaml.
+
+elasticsearch:
+  persistence:
+    enabled: true
+    size: 20Gi
+
+logstash:
+  elasticsearch:
+    host: "http://elasticsearch:9200"
+
+filebeat:
+  logstash:
+    host: "logstash:5044"
+  watchNamespace: enterprise-devops
+
+kibana:
+  elasticsearch:
+    host: "http://elasticsearch:9200"
+  ingress:
+    enabled: true
+    host: kibana.enterprise-devops.example.com
+    tls:
+      enabled: true
+      secretName: kibana-tls

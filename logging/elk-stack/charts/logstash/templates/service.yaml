@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "logstash.fullname" . }}
+  labels:
+    {{- include "logstash.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "logstash.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: beats
+      port: {{ .Values.service.beatsPort }}
+      targetPort: beats

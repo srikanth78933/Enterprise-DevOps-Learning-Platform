@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty scope="context" name="appName" source="spring.application.name"/>
+
+    <!--
+    Human-readable console output for local development - matches what
+    `logging.pattern.console` used to provide before this file existed.
+    -->
+    <springProfile name="dev">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            </encoder>
+        </appender>
+    </springProfile>
+
+    <!--
+    Structured JSON in every non-dev profile (prod/k8s) - one JSON object
+    per line on stdout, which is exactly what Filebeat's container input
+    expects (see logging/elk-stack/charts/filebeat/templates/configmap.yaml).
+    No file appender: containers log to stdout only, by design - the
+    cluster's log collection pipeline owns retention, not the app itself.
+    -->
+    <springProfile name="!dev">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <customFields>{"application":"${appName}"}</customFields>
+                <!-- MDC values (e.g. requestId set by RequestLoggingFilter)
+                     are included automatically as top-level JSON fields. -->
+            </encoder>
+        </appender>
+    </springProfile>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

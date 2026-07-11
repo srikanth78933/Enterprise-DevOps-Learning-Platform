@@ -1,72 +1,59 @@
-# Installation — Project 4: GitOps with Argo CD
+# Installation — Project 5: Centralized Logging (ELK)
 
-Assumes Project 3's cluster (EKS + Ingress Controller + Metrics Server) is
-already up. If you still have Project 3's manual `helm install` release
-running, that's fine — Argo CD will adopt it.
+Assumes `enterprise-app` is already deployed via Argo CD (Project 4).
 
-## 1. Install Argo CD
+## 1. Generate the TLS secret for Kibana
 
 ```bash
-./scripts/argocd-install.sh
-```
-
-Note the admin password it prints. Port-forward and log in to confirm it
-came up:
-
-```bash
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-# in another terminal / browser:
-open https://localhost:8080
+./scripts/generate-self-signed-tls.sh kibana.enterprise-devops.example.com kibana-tls logging
 ```
 
 ## 2. Point the Application at your fork
 
-Edit `repoURL` in both:
-- `gitops/projects/enterprise-devops-project.yaml`
-- `gitops/applications/enterprise-app.yaml`
+Edit `repoURL` in `gitops/applications/logging-stack.yaml` (and confirm
+it's still correct in `gitops/projects/enterprise-devops-project.yaml`'s
+`sourceRepos`, from Project 4).
 
-to your actual fork's URL (they default to this tutorial's origin repo).
-
-## 3. Bootstrap the AppProject and Application
+## 3. Register the Application
 
 ```bash
-./scripts/argocd-bootstrap.sh
+kubectl apply -f gitops/applications/logging-stack.yaml
+kubectl get application logging-stack -n argocd -w
 ```
 
-## 4. Create the secrets (same as Project 3, if not already done)
+Wait for `SYNC STATUS: Synced`. `HEALTH STATUS` may sit at `Progressing`
+for a minute or two while Elasticsearch initializes — that's expected.
+
+## 4. Confirm everything's running
 
 ```bash
-kubectl create namespace enterprise-devops --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl create secret generic backend-secret -n enterprise-devops \
-  --from-literal=DB_USERNAME=devops_user \
-  --from-literal=DB_PASSWORD='<strong-password>' \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl create secret generic mysql-secret -n enterprise-devops \
-  --from-literal=MYSQL_USER=devops_user \
-  --from-literal=MYSQL_PASSWORD='<same-password-as-above>' \
-  --from-literal=MYSQL_ROOT_PASSWORD='<strong-root-password>' \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl get pods,pvc -n logging
+kubectl get daemonset filebeat -n logging   # DESIRED should equal your node count
 ```
 
-## 5. Watch the first sync happen
+## 5. Open Kibana
 
 ```bash
-kubectl get application enterprise-app -n argocd -w
+./scripts/kibana-port-forward.sh
 ```
 
-Wait for `SYNC STATUS: Synced` and `HEALTH STATUS: Healthy`. Then:
+Open http://localhost:5601. First time in Kibana: **Stack Management →
+Data Views** → create a data view matching `enterprise-devops-logs-*`,
+timestamp field `@timestamp`.
+
+(Or via the real Ingress once DNS/cert trust is sorted:
+`https://kibana.enterprise-devops.example.com` — your browser will warn
+about the self-signed cert, that's expected per
+`scripts/generate-self-signed-tls.sh`'s header.)
+
+## 6. Generate sample logs
 
 ```bash
-kubectl get pods,svc,hpa,ingress -n enterprise-devops
+./scripts/generate-test-traffic.sh
 ```
 
-## 6. Set up Jenkins for GitOps
-
-Follow [`jenkins/README.md`](../jenkins/README.md) steps 7-12 (new vs.
-Project 3): scanning tools, Git write-back credentials, Argo CD CLI + auth
-token, and the two pipeline jobs pointed at this branch.
+Then in Kibana's **Discover** tab, select the `enterprise-devops-logs-*`
+data view and look for entries tagged `request_log`, `error_log`.
 
 ## Next
 

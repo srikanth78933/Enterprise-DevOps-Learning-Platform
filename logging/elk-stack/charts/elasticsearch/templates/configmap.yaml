@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "elasticsearch.fullname" . }}-config
+  labels:
+    {{- include "elasticsearch.labels" . | nindent 4 }}
+data:
+  elasticsearch.yml: |
+    cluster.name: enterprise-devops-logs
+    network.host: 0.0.0.0
+
+    # Single-node discovery: this node elects itself master immediately
+    # instead of waiting to discover peers. Scaling replicaCount above 1
+    # WITHOUT also changing this to `discovery.seed_hosts` +
+    # `cluster.initial_master_nodes` (pointed at the StatefulSet's stable
+    # pod DNS names) will not form a real cluster - it'll just run N
+    # independent single-node "clusters" that don't know about each other.
+    discovery.type: single-node
+
+    xpack.security.enabled: {{ .Values.security.enabled }}

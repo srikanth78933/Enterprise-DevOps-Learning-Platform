@@ -1,0 +1,21 @@
+image:
+  repository: docker.elastic.co/beats/filebeat
+  tag: "8.15.0"
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+logstash:
+  host: "logstash:5044"
+
+# Only ship logs from this namespace by default - a cluster running
+# multiple teams' workloads would drop this filter (or scope it per
+# Filebeat deployment per namespace) rather than shipping everyone's logs
+# into one shared index.
+watchNamespace: enterprise-devops

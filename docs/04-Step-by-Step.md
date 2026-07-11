@@ -1,60 +1,67 @@
-# Step-by-Step Walkthrough — Project 4: GitOps with Argo CD
+# Step-by-Step Walkthrough — Project 5: Centralized Logging (ELK)
 
-## 1. Trigger the backend pipeline and watch it stop short of deploying
-
-Push a trivial backend change. Watch the Jenkins console — after "Update
-GitOps Values," it just shows a git push, then "Wait for Argo CD Sync"
-polling. No `kubectl`, no `helm`, anywhere in the log.
+## 1. Confirm raw logs look right before trusting the pipeline
 
 ```bash
-git log --oneline -3   # should show the "chore(gitops): bump backend image tag..." commit
+./scripts/tail-logs.sh
 ```
 
-## 2. Watch Argo CD pick it up independently
+You should see one JSON object per line, each with `level`, `logger_name`,
+`message`, and (during an active request) `requestId`. If this looks like
+plain text instead of JSON, `SPRING_PROFILES_ACTIVE` isn't set to
+anything other than `dev` for this pod — check
+`helm/enterprise-app/charts/backend/values.yaml`'s
+`config.springProfilesActive`.
+
+## 2. Find the five log categories in Kibana
+
+After running `scripts/generate-test-traffic.sh`, in Kibana's Discover
+tab:
+
+- **Application logs**: search `app.logger_name: *` (everything has this)
+- **Request logs**: search `tags: request_log`
+- **Error logs**: search `app.level: ERROR` or `tags: error_log`
+- **Exception logs**: same as error logs — open one and expand
+  `app.stack_trace` to see the full trace
+- **Slow requests**: search `tags: slow_request` (see step 3 to actually
+  produce one)
+
+## 3. Produce a slow-request log entry on purpose
+
+The default threshold (`SLOW_REQUEST_THRESHOLD_MS=1000`) is unlikely to
+trigger under normal local traffic. Lower it temporarily:
 
 ```bash
-kubectl get application enterprise-app -n argocd -w
+helm upgrade enterprise-app helm/enterprise-app -n enterprise-devops \
+  --reuse-values --set backend.config.slowRequestThresholdMs=1
 ```
 
-You'll see `SYNC STATUS` flip to `OutOfSync` right after the Jenkins
-commit lands, then back to `Synced` once Argo CD reconciles — this happens
-whether or not Jenkins' `Wait for Argo CD Sync` stage is even running;
-Argo CD doesn't know or care that Jenkins exists.
+(This is a direct Helm upgrade for a quick demo, bypassing GitOps — revert
+it via a Git-tracked change afterward, not another direct `helm upgrade`,
+to avoid leaving your `enterprise-app` release drifted from what Argo CD's
+`selfHeal` expects to find.)
 
-## 3. Prove self-healing actually works
+Then re-run `./scripts/generate-test-traffic.sh` — every request now
+exceeds 1ms and logs as `slow_request`.
+
+## 4. Trace one request end-to-end via `requestId`
 
 ```bash
-./scripts/simulate-self-heal.sh
+curl -sD - -H "Host: enterprise-devops.example.com" "http://<lb-hostname>/api/employees/999999" -o /dev/null | grep -i x-request-id
 ```
 
-Or by hand: `kubectl scale deployment/backend -n enterprise-devops
---replicas=5`, then watch `kubectl get deployment backend -n
-enterprise-devops -w` — it reverts to the Git-declared replica count
-without anyone running `kubectl` again.
+Copy the `X-Request-Id` value, then in Kibana search
+`app.requestId: "<that-value>"` — you should see both the `request_log`
+line (WARN or INFO, status 404) and the corresponding warn-level
+`resource_not_found` application log from `GlobalExceptionHandler`, tied
+together by that one field.
 
-## 4. Prove rollback works — via Git, not `helm rollback`
+## 5. Build a simple Kibana dashboard
 
-```bash
-# find the commit that bumped the tag you want to undo
-git log --oneline -- helm/enterprise-app/values-images/backend.yaml
-
-git revert <that-commit-sha>
-git push origin project-04-gitops-argocd
-```
-
-Watch Argo CD deploy the reverted (older) image automatically. This is
-the GitOps answer to "how do I roll back" — `git revert`, not a special
-deploy-tool command. (Argo CD also supports rolling back via its own UI/
-CLI to a previous *sync* — try `argocd app history enterprise-app` and
-`argocd app rollback enterprise-app <id>` too, and think about how that
-differs from a Git revert in terms of what's actually recorded as truth.)
-
-## 5. Trigger a scan failure on purpose
-
-Temporarily downgrade a backend dependency in `backend/pom.xml` to a
-version with a known critical CVE (check the NVD database for an example),
-push, and watch the **OWASP Dependency Check** or **Trivy Scan** stage
-fail the build before an image ever reaches Docker Hub. Revert afterward.
+Create a visualization counting log volume by `tags` over time, and a
+second one counting by `app.level`. Save both to a dashboard named
+"Enterprise DevOps — Log Overview." This is what `docs/08-Assignments.md`
+builds on.
 
 ## Next
 

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: elasticsearch
+description: Single-node Elasticsearch for the Enterprise DevOps Learning Platform's log store
+type: application
+version: 1.0.0
+appVersion: "8.15.0"

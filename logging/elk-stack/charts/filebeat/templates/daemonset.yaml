@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "filebeat.fullname" . }}
+  labels:
+    {{- include "filebeat.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "filebeat.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "filebeat.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "filebeat.fullname" . }}
+      terminationGracePeriodSeconds: 30
+      # Runs on every node, including any that would otherwise be tainted -
+      # a log shipper needs to observe every node's containers, not just
+      # the ones scheduling regular workloads.
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+        - operator: Exists
+          effect: NoExecute
+      containers:
+        - name: filebeat
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-c", "/etc/filebeat.yml", "-e"]
+          # Reading /var/log/containers and the docker.sock-adjacent log
+          # directories requires root - this is standard practice for
+          # every mainstream log-shipping DaemonSet (Filebeat, Fluentd,
+          # Fluent Bit), not specific to this chart.
+          securityContext:
+            runAsUser: 0
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/filebeat.yml
+              subPath: filebeat.yml
+              readOnly: true
+            - name: varlogcontainers
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: data
+              mountPath: /usr/share/filebeat/data
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "filebeat.fullname" . }}-config
+        - name: varlogcontainers
+          hostPath:
+            path: /var/log/containers
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+        - name: data
+          hostPath:
+            # Persists Filebeat's read-offset registry across pod restarts
+            # so a restart doesn't re-ship (or skip) log lines.
+            path: /var/lib/filebeat-data
+            type: DirectoryOrCreate

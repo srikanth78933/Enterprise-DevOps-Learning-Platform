@@ -1,65 +1,62 @@
-# Project 4 — GitOps with Argo CD
+# Project 5 — Centralized Logging (ELK)
 
 Part of the [Enterprise DevOps Learning Platform](https://github.com/srikanth78933/Enterprise-DevOps-Learning-Platform).
-This branch continues from `project-03-cicd-helm-microservices` and
-replaces Jenkins calling `helm upgrade` directly with Argo CD watching
-this Git repository. Also adds security scanning (OWASP Dependency Check,
-Trivy, optional Docker Scout) to both pipelines. **No application code
-changed.**
+This branch continues from `project-04-gitops-argocd` and adds centralized
+logging: Elasticsearch, Logstash, Filebeat, and Kibana, deployed as an
+independent Argo CD-managed Helm release. **This is the first project
+branch with real backend code changes** — logging instrumentation, not
+business logic.
 
 ```
-Git -> Jenkins -> Build -> Test -> Scan -> Push Image
-    -> Update Helm values -> Git Commit -> Argo CD Sync -> Deploy
+Application (stdout, JSON) -> Filebeat -> Logstash -> Elasticsearch -> Kibana
 ```
 
 ## What you'll learn
 
-GitOps principles (desired state, drift, self-healing, rollback via Git
-history), Argo CD (Application, AppProject, sync policies), and dependency/
-image vulnerability scanning as a CI gate.
+The ELK stack's roles (shipper, pipeline, store, UI), StatefulSets +
+`volumeClaimTemplates`, DaemonSets, Kubernetes RBAC for a log shipper,
+StorageClasses, resource limits at logging-infrastructure scale, Ingress
+with TLS, and how to design application logging (structured JSON,
+request/slow-request/exception categorization) so a log pipeline is
+actually useful.
 
 ## What's new in this branch
 
 ```
-├── gitops/
-│   ├── argocd/values.yaml            Helm values for installing Argo CD itself
-│   ├── projects/enterprise-devops-project.yaml   Argo CD AppProject
-│   └── applications/enterprise-app.yaml          Argo CD Application (the desired state)
-├── helm/enterprise-app/values-images/
-│   ├── backend.yaml                  Jenkins-managed, Argo CD-watched
-│   └── frontend.yaml                 Jenkins-managed, Argo CD-watched
-├── backend/Jenkinsfile               + OWASP Dependency Check, Trivy, Docker Scout, GitOps commit
-├── frontend/Jenkinsfile              + npm audit, Trivy, Docker Scout, GitOps commit
-├── backend/owasp-suppressions.xml    Documented false-positive suppressions only
-├── architecture/pipeline-diagram.md  Full GitOps flow + self-healing loop diagrams
+├── backend/src/main/resources/logback-spring.xml   JSON logs (prod) vs plain (dev)
+├── backend/.../filter/RequestLoggingFilter.java     Request + slow-request logging
+├── backend/.../exception/GlobalExceptionHandler.java  Now actually logs (WARN vs ERROR)
+├── logging/elk-stack/                Umbrella chart: elasticsearch, logstash, filebeat, kibana
+├── gitops/applications/logging-stack.yaml   Independent Argo CD Application
+├── architecture/log-flow.md          Full pipeline diagram + log-category reference
+├── scripts/
+│   ├── generate-self-signed-tls.sh   TLS for Kibana's Ingress
+│   ├── kibana-port-forward.sh        Quick local access
+│   ├── tail-logs.sh                  Raw kubectl logs, bypassing ELK (for comparison)
+│   └── generate-test-traffic.sh      Produces sample logs across all 5 categories
 └── docs/                             01-Prerequisites through 09-Interview-Questions, scoped to this project
-
-(removed from both Jenkinsfiles: AWS credentials, kubectl/helm deploy stages -
- Jenkins no longer has cluster access at all)
 ```
+
+No changes to `helm/enterprise-app/`, either Jenkinsfile, or `terraform/`
+— this project is additive.
 
 ## Quick start
 
-1. Already have the EKS cluster + Helm chart working from Project 3? Good
-   — infrastructure and the chart's shape are unchanged.
-2. `./scripts/argocd-install.sh` then `./scripts/argocd-bootstrap.sh`
-3. Create secrets per [`helm/enterprise-app/README.md`](helm/enterprise-app/README.md)
-   (same as Project 3)
-4. `jenkins/README.md` → update both pipeline jobs (steps 7-12 are new vs.
-   Project 3)
-5. Push a change, watch Jenkins stop at "commit to Git," then watch Argo
-   CD pick it up
+1. `./scripts/generate-self-signed-tls.sh kibana.enterprise-devops.example.com kibana-tls logging`
+2. Update `repoURL` in `gitops/applications/logging-stack.yaml` to your fork
+3. `kubectl apply -f gitops/applications/logging-stack.yaml`
+4. `./scripts/kibana-port-forward.sh` then open http://localhost:5601
+5. `./scripts/generate-test-traffic.sh` to produce sample logs, then explore
+   Discover in Kibana
 
 Full walkthrough: [`docs/03-Installation.md`](docs/03-Installation.md).
-Try the self-healing demo:
-[`docs/04-Step-by-Step.md`](docs/04-Step-by-Step.md).
 
 ## Next branch
 
-`project-05-logging-elk` adds centralized logging — a new Helm subchart
-and Argo CD Application, deployed the same GitOps way this project
+`project-06-monitoring-prometheus-grafana` adds metrics-based observability
+(Prometheus, Alertmanager, Grafana) alongside the logging this project
 established.
 
 ```bash
-git checkout project-05-logging-elk
+git checkout project-06-monitoring-prometheus-grafana
 ```

@@ -1,49 +1,50 @@
-# GitOps Flow — Project 4
+# Log Pipeline Flow — Project 5
 
-Full diagrams: [`/architecture/pipeline-diagram.md`](../architecture/pipeline-diagram.md).
+Full diagram: [`/architecture/log-flow.md`](../architecture/log-flow.md).
 
-## What each new/changed stage does
+## End-to-end, one request
 
-| Stage | Command | Fails the build if... |
-|---|---|---|
-| OWASP Dependency Check (backend only) | `mvn dependency-check:check` | Any dependency has CVSS >= 8 and isn't suppressed |
-| npm audit (frontend only) | `npm audit --omit=dev --audit-level=high` | Any runtime dependency has a high/critical advisory |
-| Trivy Scan (both) | `trivy image --severity CRITICAL --exit-code 1 --ignore-unfixed` | Any *fixable* CRITICAL CVE in the built image |
-| Docker Scout (both, optional) | `docker scout cves --only-severity critical --exit-code` | Never fails the build — `catchError` caps it at `UNSTABLE` |
-| Update GitOps Values | `scripts/update-image-tag.sh <service> <tag>` | Push fails after 3 rebase-and-retry attempts |
-| Wait for Argo CD Sync | `argocd app wait --health --sync` | Argo CD doesn't report Synced+Healthy within 300s |
+1. A client calls `GET /api/employees/999999`
+2. `RequestLoggingFilter` assigns a `requestId`, lets the request proceed
+3. `EmployeeServiceImpl` throws `ResourceNotFoundException`
+4. `GlobalExceptionHandler.handleNotFound` logs at WARN:
+   `resource_not_found uri=/api/employees/999999 message=...`
+   (with `requestId` attached via MDC, no stack trace — this is expected
+   client behavior, not a system failure)
+5. `RequestLoggingFilter`'s `finally` block logs the request line:
+   `request method=GET uri=/api/employees/999999 status=404 durationMs=12`
+   (same `requestId`)
+6. Both lines are written as JSON to stdout by `logback-spring.xml`'s
+   non-dev appender
+7. The container runtime captures stdout to
+   `/var/log/containers/backend-<pod>-<container>.log` on the node
+8. Filebeat (already tailing that file via Kubernetes autodiscover) ships
+   both lines to Logstash over the beats protocol
+9. Logstash's `json` filter parses `message` into the `app.*` fields, adds
+   the `error_log` tag if `app.level == ERROR` (not triggered here — WARN
+   isn't ERROR) or matches `slow_request`/`request_log` patterns
+10. Elasticsearch indexes both documents into
+    `enterprise-devops-logs-2026.07.11`
+11. Kibana's Discover, searching `app.requestId: "<the-id>"`, shows both
 
-## Why Trivy blocks but Docker Scout doesn't
+## Why request logging happens in a Filter, not an Interceptor
 
-Running two full vulnerability scanners as equally-blocking gates means
-every finding either tool disagrees about (different CVE databases,
-different severity scoring) becomes a pipeline outage someone has to
-adjudicate. Trivy is the one blocking gate; Docker Scout runs as a second
-opinion that surfaces in the build's `UNSTABLE` status without stopping
-delivery — a deliberate choice, not an oversight. See
-`docs/08-Assignments.md` for swapping in Grype as a third option to
-compare against.
+A `Filter` runs before Spring's `DispatcherServlet` and wraps the *entire*
+request lifecycle, including cases that never reach a controller method at
+all (404s for unmapped routes, requests rejected by CORS). A
+`HandlerInterceptor` only fires once a handler is resolved — it would miss
+exactly the kind of "this route doesn't exist" traffic that's often the
+most useful to see in a request log.
 
-## The commit that actually deploys
+## Why MDC instead of just including requestId in every log call manually
 
-```bash
-git show --stat HEAD  # after a pipeline run, on gitops-relevant commits
-```
-
-Every deploy has exactly one corresponding Git commit:
-`chore(gitops): bump backend image tag to 47 [skip ci]`, touching exactly
-one file. This is the audit trail GitOps is actually for — "what's
-running in production" is always answerable by `git log
-helm/enterprise-app/values-images/`.
-
-## Argo CD's reconciliation loop (independent of Jenkins)
-
-Argo CD polls the Git repository (default every 3 minutes) and reacts to
-webhooks if configured, comparing the rendered Helm output against live
-cluster state on every pass — completely independent of whether Jenkins
-is running, healthy, or even installed. If Jenkins is down for a day, any
-commit anyone pushes to `values-images/*.yaml` by hand still gets deployed
-by Argo CD. That decoupling is the point.
+`MDC.put("requestId", ...)` (in `RequestLoggingFilter`) makes every log
+statement *anywhere* in the call stack for that request — including ones
+in code that has no idea a request is even in flight, like a repository or
+service method — automatically carry that field once
+`logstash-logback-encoder` picks it up. Threading a `requestId` parameter
+through every method signature by hand would be significantly more
+invasive for the same result.
 
 ## Next
 

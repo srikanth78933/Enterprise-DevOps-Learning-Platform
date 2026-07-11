@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "logstash.fullname" . }}-config
+  labels:
+    {{- include "logstash.labels" . | nindent 4 }}
+data:
+  logstash.yml: |
+    http.host: "0.0.0.0"
+    path.config: /usr/share/logstash/pipeline
+
+  pipeline.conf: |
+    input {
+      beats {
+        port => {{ .Values.service.beatsPort }}
+      }
+    }
+
+    filter {
+      # backend/frontend both run under a "app.kubernetes.io/name" label
+      # (see helm/enterprise-app charts) - Filebeat's Kubernetes
+      # autodiscover attaches it as [kubernetes][labels][app_kubernetes_io/name].
+      # Only the backend emits JSON (logstash-logback-encoder, prod
+      # profile - see backend/src/main/resources/logback-spring.xml);
+      # parse that JSON into structured fields so Kibana can filter by
+      # level, logger, requestId, etc. instead of full-text-searching a
+      # single opaque message blob.
+      if [kubernetes][labels][app_kubernetes_io/name] == "backend" {
+        json {
+          source => "message"
+          target => "app"
+        }
+
+        if [app][level] == "ERROR" {
+          mutate { add_tag => ["error_log"] }
+        }
+        if [app][message] =~ "slow_request" {
+          mutate { add_tag => ["slow_request"] }
+        }
+        if [app][message] =~ "^request " {
+          mutate { add_tag => ["request_log"] }
+        }
+      }
+    }
+
+    output {
+      elasticsearch {
+        hosts => ["{{ .Values.elasticsearch.host }}"]
+        index => "{{ .Values.elasticsearch.indexPrefix }}-%{+YYYY.MM.dd}"
+      }
+    }

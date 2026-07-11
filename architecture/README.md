@@ -1,57 +1,53 @@
-# Architecture — Project 4: GitOps with Argo CD
+# Architecture — Project 5: Centralized Logging (ELK)
 
-This project doesn't change the AWS infrastructure (`terraform/`, still
-Project 2's cluster) or the Helm chart's *shape* (`helm/enterprise-app/`,
-still Project 3's frontend/backend/mysql subcharts). What changes is who's
-allowed to deploy: Jenkins loses cluster credentials entirely, and Argo CD
-becomes the only path from "declared in Git" to "running in the cluster."
+This project adds a second, independent Argo CD-managed Helm release —
+`elk-stack` — alongside the `enterprise-app` release Projects 2-4
+established. It also instruments the backend to actually produce
+structured, categorized logs; without that, there'd be nothing meaningful
+for Elasticsearch to index or Kibana to visualize.
 
-See [`pipeline-diagram.md`](./pipeline-diagram.md) for the full flow and
-sequence diagrams.
+See [`log-flow.md`](./log-flow.md) for the full pipeline diagram.
 
-## What's new vs. project-03-cicd-helm-microservices
+## What's new vs. project-04-gitops-argocd
 
-| Added | Removed | Purpose |
-|---|---|---|
-| `gitops/projects/enterprise-devops-project.yaml` | — | Argo CD AppProject: scopes allowed repos/destinations |
-| `gitops/applications/enterprise-app.yaml` | — | Argo CD Application: the desired-state declaration |
-| `gitops/argocd/values.yaml` | — | Helm values for installing Argo CD itself |
-| `helm/enterprise-app/values-images/{backend,frontend}.yaml` | — | Git-tracked, Jenkins-managed image tags Argo CD watches |
-| OWASP Dependency Check (backend), `npm audit` (frontend), Trivy image scan (both), Docker Scout (both, optional) | — | Security scanning gates before an image ships |
-| `scripts/update-image-tag.sh` | — | What replaced `helm upgrade`/`kubectl set image` in both Jenkinsfiles |
-| — | AWS credentials from both Jenkinsfiles | Jenkins no longer needs cluster access at all |
-| — | "Helm Upgrade" / "Deploy to EKS" stages | Replaced by "Update GitOps Values" + "Wait for Argo CD Sync" |
+| Added | Purpose |
+|---|---|
+| `backend/src/main/resources/logback-spring.xml` | JSON logs in prod/k8s, human-readable in dev |
+| `backend/.../filter/RequestLoggingFilter.java` | Request + slow-request logging, requestId MDC |
+| `GlobalExceptionHandler` logging (WARN vs ERROR) | Error/exception logs, deliberately not all at one level |
+| `logging/elk-stack/` (Elasticsearch, Logstash, Filebeat, Kibana subcharts) | The log pipeline itself |
+| `gitops/applications/logging-stack.yaml` | Independent Argo CD Application for the logging stack |
 
-## Key design decisions
+## Why `elk-stack` is a separate Argo CD Application, not folded into `enterprise-app`
 
-- **`values-images/*.yaml` live inside the Helm chart directory, not
-  under `gitops/`.** Argo CD resolves Helm `valueFiles` relative to
-  `source.path` and restricts `../` traversal outside it by default. Two
-  tiny always-the-same-shape files inside the chart avoids that
-  restriction entirely — see `gitops/README.md` for the full reasoning.
-- **Jenkins loses `kubectl`/AWS credentials on purpose.** This is the
-  actual point of GitOps, not an incidental cleanup: exactly one thing
-  (Argo CD) can mutate cluster state for this application, which is what
-  makes "what's running in production" always traceable to a specific Git
-  commit.
-- **`argocd app wait` is a read-only status check, not a deploy step.**
-  Both Jenkinsfiles still confirm the deploy actually succeeded before
-  reporting the build green — they just do it by *asking* Argo CD, not by
-  *doing* the deploy themselves.
-- **Docker Scout is non-blocking (`catchError` → `UNSTABLE`, never
-  `FAILURE`).** Matches the spec's "(Optional)" framing — Trivy is the
-  blocking image scanner; Docker Scout is a second opinion, not a second
-  gate. Grype is documented as a swappable alternative in
-  `docs/08-Assignments.md` rather than added as a third redundant scanner.
-- **`targetRevision` in `gitops/applications/enterprise-app.yaml` points
-  at this exact branch.** A real GitOps setup tracks a stable branch or a
-  dedicated environment branch, not a per-lesson feature branch — this is
-  a tutorial-scoped simplification, called out explicitly in that file's
-  comments.
+- **Different lifecycle.** Logging infrastructure gets upgraded, scaled,
+  or torn down on its own schedule, unrelated to application deploys.
+- **Different blast radius for `selfHeal`.** `enterprise-app`'s
+  Application has `selfHeal: true` — safe, because its Deployments are
+  stateless and reverting drift just means a rolling restart.
+  `logging-stack`'s Application deliberately omits `selfHeal` — a
+  StatefulSet holding actual log data is riskier to auto-revert without a
+  human looking first (see the comment in that file).
+- **Different namespace.** `logging` vs `enterprise-devops` — logging
+  infrastructure watching the application namespace, not living inside it,
+  mirrors how you'd operate this for real (one shared logging stack could
+  eventually observe multiple application namespaces).
+
+## Why the backend needed actual code changes (not just infra)
+
+Every prior project touched only infrastructure/pipeline code —
+`backend/src` and `frontend/src` were byte-for-byte identical from `main`
+through Project 4. Project 5 is the first exception: centralized logging
+is meaningless without something worth centralizing. The three additions
+(`logback-spring.xml`, `RequestLoggingFilter`, `GlobalExceptionHandler`
+logging) are the minimum needed to produce the five log categories the
+project's learning goals name explicitly (Application, Error, Request,
+Exception, Slow Request logs) — see `log-flow.md`'s table for exactly
+which code produces which category.
 
 ## Next branch
 
-`project-05-logging-elk` adds centralized logging (Filebeat → Logstash →
-Elasticsearch → Kibana) for both services, deployed the same GitOps way
-this project established — a new subchart, same Argo CD Application
-pattern.
+`project-06-monitoring-prometheus-grafana` adds metrics (as opposed to
+logs) — Prometheus, Alertmanager, Grafana — observing the same
+application through a different lens, deployed the same GitOps way this
+project and the last one established.

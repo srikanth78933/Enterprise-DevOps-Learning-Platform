@@ -17,6 +17,9 @@ service:
 config:
   springProfilesActive: prod
   dbUrl: "jdbc:mysql://mysql:3306/enterprise_devops?useSSL=false&allowPublicKeyRetrieval=true"
+  # Project 5: requests slower than this log at WARN with a `slow_request`
+  # tag instead of INFO - see backend/.../filter/RequestLoggingFilter.java.
+  slowRequestThresholdMs: 1000
 
 # Real credentials are never set here - create the secret imperatively
 # (see helm/enterprise-app/README.md) and reference it by name.

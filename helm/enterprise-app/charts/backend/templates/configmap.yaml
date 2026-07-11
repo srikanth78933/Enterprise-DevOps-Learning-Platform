@@ -13,3 +13,4 @@ data:
          this chart is installed standalone, outside the umbrella. */}}
   CORS_ALLOWED_ORIGINS: {{ printf "http://%s" (.Values.global.ingressHost | default "enterprise-devops.example.com") | quote }}
   SERVER_PORT: {{ .Values.service.port | quote }}
+  SLOW_REQUEST_THRESHOLD_MS: {{ .Values.config.slowRequestThresholdMs | quote }}

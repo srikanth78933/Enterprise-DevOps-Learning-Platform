@@ -1,61 +1,66 @@
-# Troubleshooting — Project 4: GitOps with Argo CD
+# Troubleshooting — Project 5: Centralized Logging (ELK)
 
-## Argo CD Application stuck `OutOfSync` forever, never reconciles
+## Elasticsearch pod stuck `CrashLoopBackOff` with a `max virtual memory areas` error
 
-Check `kubectl describe application enterprise-app -n argocd` for the
-actual error. Common causes: `repoURL` in
-`gitops/applications/enterprise-app.yaml` doesn't match what's allow-listed
-in `gitops/projects/enterprise-devops-project.yaml`'s `sourceRepos`, or the
-`targetRevision` branch doesn't exist / was force-pushed out from under it.
+`vm.max_map_count` isn't set high enough on the node. Confirm the
+`sysctl` init container actually ran (`kubectl describe pod
+elasticsearch-0 -n logging`) — if your cluster's admission policy blocks
+privileged init containers, set `elasticsearch.sysctlInitContainer.enabled:
+false` in `logging/elk-stack/values.yaml` and set
+`vm.max_map_count=262144` at the node level instead (via a custom launch
+template's user-data, or a separate privileged DaemonSet your platform
+team already runs for this purpose).
 
-## `Error: secrets "backend-secret" not found` in the Application's sync error
+## Elasticsearch pod `Pending` forever
 
-Same root cause as Project 3 — Argo CD renders the chart the same way
-`helm install` does, and it references `existingSecret` by name. Create
-the secrets first; Argo CD doesn't create them for you (intentionally —
-see `helm/enterprise-app/README.md`).
+Almost always the PVC. `kubectl describe pvc data-elasticsearch-0 -n
+logging` — check the `gp2` StorageClass exists
+(`kubectl get storageclass`) and that your node group has capacity in the
+same AZ as wherever the PV gets provisioned.
 
-## `scripts/update-image-tag.sh` fails with "failed to push after 3 attempts"
+## `kubectl get daemonset filebeat -n logging` shows fewer `READY` than `DESIRED`
 
-Something else is committing to the branch concurrently faster than the
-rebase-retry loop can keep up (rare with two files that never overlap,
-but possible if a human is also pushing to the branch during a demo).
-Re-run the pipeline, or push manually after investigating
-`git log --oneline -5`.
+```bash
+kubectl describe daemonset filebeat -n logging
+kubectl logs -l app.kubernetes.io/name=filebeat -n logging --previous
+```
 
-## Jenkins pipeline re-triggers itself in a loop after every deploy
+Common cause: the ClusterRole/ClusterRoleBinding
+(`logging/elk-stack/charts/filebeat/templates/rbac.yaml`) didn't sync —
+check Argo CD didn't reject them (see
+`gitops/projects/enterprise-devops-project.yaml`'s
+`clusterResourceWhitelist` — Project 5 added `ClusterRole`/
+`ClusterRoleBinding` there specifically for this).
 
-The webhook/polling trigger isn't actually scoped to `backend/**` /
-`frontend/**` — see `jenkins/README.md` step 8's loop-avoidance note. Fix
-the trigger's path filter; don't rely on the `[skip ci]` commit message
-marker alone unless your specific Jenkins trigger plugin actually honors it
-(many don't, by default).
+## No documents showing up in Kibana at all
 
-## `argocd login` fails with a certificate error
+Work backward through the pipeline:
 
-The `--insecure` flag in both Jenkinsfiles' "Wait for Argo CD Sync" stage
-is what allows this against the self-signed cert from
-`gitops/argocd/values.yaml`'s `server.insecure: true` setting. If you
-changed that to a real TLS setup, remove `--insecure` and ensure the
-agent trusts the real certificate instead.
+```bash
+./scripts/tail-logs.sh                                    # 1. is the app actually emitting JSON?
+kubectl logs -l app.kubernetes.io/name=filebeat -n logging | grep -i error   # 2. is Filebeat erroring?
+kubectl logs -l app.kubernetes.io/name=logstash -n logging | tail -50        # 3. is Logstash erroring?
+curl http://localhost:9200/_cat/indices?v                 # 4. (via port-forward) does the index exist at all?
+```
 
-## Docker Scout stage shows `UNSTABLE` — is that a real problem?
+## Logs show up but `app.level`/`app.message` fields are missing (just raw `message`)
 
-Check the stage log for what it actually found. `UNSTABLE` here means
-"Docker Scout found a critical CVE, but this doesn't block delivery" — it's
-informational by design (see `architecture/README.md`). Treat repeated
-`UNSTABLE` builds as a signal to investigate, not as noise to ignore
-indefinitely.
+Logstash's `json` filter is gated on
+`[kubernetes][labels][app_kubernetes_io/name] == "backend"` — confirm the
+backend Deployment actually carries that label (it does, via
+`helm/enterprise-app/charts/backend/templates/_helpers.tpl`'s
+`backend.selectorLabels`) and that Filebeat's `add_kubernetes_metadata`
+processor is attaching it (check one raw document in Kibana — expand
+`kubernetes.labels` and confirm the key is present, possibly dedotted to
+`app_kubernetes_io/name`).
 
-## Self-heal demo doesn't revert the scaled replicas
+## `Wait for Argo CD Sync` isn't relevant here — why?
 
-Confirm `syncPolicy.automated.selfHeal: true` is actually set in
-`gitops/applications/enterprise-app.yaml` and that the Application applied
-successfully (`kubectl get application enterprise-app -n argocd -o
-yaml | grep -A3 syncPolicy`). Also check Argo CD's reconciliation
-interval hasn't been tuned up in your install — the default 3-minute
-polling means `scripts/simulate-self-heal.sh`'s 5-minute wait should
-always be enough, but a heavily loaded Argo CD controller can lag further.
+Neither Jenkinsfile changed in this project. `logging-stack` is deployed
+by directly applying `gitops/applications/logging-stack.yaml` (see
+`docs/03-Installation.md`), not through a Jenkins pipeline — there's no
+image to build for infrastructure-as-Helm-chart the way there is for the
+application tier.
 
 ## Next
 

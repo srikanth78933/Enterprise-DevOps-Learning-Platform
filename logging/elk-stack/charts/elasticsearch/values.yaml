@@ -1,0 +1,44 @@
+image:
+  repository: docker.elastic.co/elasticsearch/elasticsearch
+  tag: "8.15.0"
+  pullPolicy: IfNotPresent
+
+# Single-node "cluster" - appropriate for a learning environment, not a
+# production log store. A real deployment runs at least 3 master-eligible
+# nodes; see the comment in templates/configmap.yaml for the exact setting
+# that changes when you scale this up.
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1.5Gi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+# Elasticsearch's JVM heap should be ~half of the container memory limit,
+# and must be set explicitly - it doesn't auto-detect container cgroup
+# limits reliably in all environments. Keep this in sync with
+# resources.limits.memory above.
+javaOpts: "-Xms1g -Xmx1g"
+
+persistence:
+  enabled: true
+  storageClassName: gp2
+  size: 20Gi
+
+sysctlInitContainer:
+  enabled: true
+
+service:
+  port: 9200
+  transportPort: 9300
+
+security:
+  # Disabled for this learning environment to avoid requiring TLS between
+  # every ELK component and a bootstrap password flow on top of the
+  # Kibana-facing TLS already set up in Project 5. A production deployment
+  # enables this and sets up mTLS between Elasticsearch/Logstash/Kibana -
+  # see docs/06-Troubleshooting.md for what specifically to change.
+  enabled: false

@@ -1,0 +1,46 @@
+# Separate Argo CD Application from enterprise-app - logging infrastructure
+# has its own lifecycle (upgraded, scaled, and occasionally torn down
+# independently of the application it observes) and deploys to its own
+# `logging` namespace. Keeping it as its own Application means a change
+# to one release's sync status/history never gets confused with the other's
+# in the Argo CD UI, and either can be deleted without touching the other.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: logging-stack
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: enterprise-devops
+
+  source:
+    repoURL: "https://github.com/srikanth78933/Enterprise-DevOps-Learning-Platform.git"
+    targetRevision: project-05-logging-elk
+    path: logging/elk-stack
+    helm:
+      valueFiles:
+        - values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+
+  syncPolicy:
+    automated:
+      prune: true
+      # Deliberately NOT selfHeal here, unlike enterprise-app. Elasticsearch
+      # data volumes and index state make "revert to Git on any drift"
+      # riskier for a stateful log store than for the mostly-stateless
+      # application tier - a human should look before a scale-down or
+      # config change gets auto-reverted on this release. See
+      # docs/02-Architecture.md for the full reasoning.
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

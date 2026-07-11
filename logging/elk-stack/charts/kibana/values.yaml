@@ -1,0 +1,31 @@
+image:
+  repository: docker.elastic.co/kibana/kibana
+  tag: "8.15.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+elasticsearch:
+  host: "http://elasticsearch:9200"
+
+service:
+  port: 5601
+
+ingress:
+  enabled: true
+  className: nginx
+  host: kibana.enterprise-devops.example.com
+  tls:
+    enabled: true
+    # Created out-of-band by scripts/generate-self-signed-tls.sh - never
+    # templated by this chart (same "secrets never pass through Helm"
+    # principle as backend-secret/mysql-secret since Project 2).
+    secretName: kibana-tls

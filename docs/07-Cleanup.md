@@ -1,54 +1,45 @@
-# Cleanup — Project 4: GitOps with Argo CD
+# Cleanup — Project 5: Centralized Logging (ELK)
 
-## 1. Delete the Argo CD Application (also deletes what it deployed)
-
-```bash
-kubectl delete -f gitops/applications/enterprise-app.yaml
-```
-
-The `resources-finalizer.argocd.argoproj.io` finalizer on the Application
-(see that file) means this also removes the Deployments/Services/HPA/
-Ingress it created — confirm the Ingress load balancer is actually gone
-(AWS Console → EC2 → Load Balancers) before proceeding to infra teardown.
-
-## 2. Remove the AppProject
+## 1. Delete the logging Application (removes everything it deployed)
 
 ```bash
-kubectl delete -f gitops/projects/enterprise-devops-project.yaml
+kubectl delete -f gitops/applications/logging-stack.yaml
 ```
 
-## 3. Uninstall Argo CD itself
+The finalizer means this also removes Elasticsearch's StatefulSet, PVC,
+Logstash, Filebeat's DaemonSet + RBAC, and Kibana + its Ingress.
+
+## 2. Confirm the Elasticsearch PVC is actually gone
+
+`prune: true` should remove it along with everything else, but PVCs from
+StatefulSets sometimes need an explicit check:
 
 ```bash
-helm uninstall argocd -n argocd
-kubectl delete namespace argocd
+kubectl get pvc -n logging
+# if anything remains:
+kubectl delete pvc -n logging --all
 ```
 
-## 4. Remove the Ingress Controller
+## 3. Remove the TLS secret and namespace
 
 ```bash
-helm uninstall ingress-nginx -n ingress-nginx
+kubectl delete secret kibana-tls -n logging
+kubectl delete namespace logging
 ```
 
-## 5. Remove secrets and PVC (only if you want the data gone)
+## 4. Revert any temporary demo changes
 
-```bash
-kubectl delete secret backend-secret mysql-secret -n enterprise-devops
-kubectl delete pvc mysql-pvc -n enterprise-devops
-```
+If you followed `docs/04-Step-by-Step.md` step 3 (lowering
+`slowRequestThresholdMs` via a direct `helm upgrade`), make sure that's
+reverted via a proper Git-tracked change, not left as drift — Argo CD's
+`selfHeal` on `enterprise-app` (Project 4) will otherwise fight with it
+next sync.
 
-## 6. Destroy the AWS infrastructure
+## What you're NOT tearing down here
 
-```bash
-./scripts/terraform-destroy.sh
-```
-
-## 7. Revoke tokens created for this project
-
-- The Argo CD `jenkins-ci` account token
-  (`argocd account delete-token jenkins-ci <token-id>`)
-- The GitHub PAT created for Jenkins' git write-back, if solely used for
-  this learning exercise
+`enterprise-app`, the EKS cluster, and Argo CD itself are untouched by
+this cleanup — see Project 4's `docs/07-Cleanup.md` if you're tearing
+down everything.
 
 ## Next
 

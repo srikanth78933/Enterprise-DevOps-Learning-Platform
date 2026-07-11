@@ -1,0 +1,6 @@
+apiVersion: v2
+name: filebeat
+description: Log shipper (container stdout -> Logstash) for the Enterprise DevOps Learning Platform
+type: application
+version: 1.0.0
+appVersion: "8.15.0"

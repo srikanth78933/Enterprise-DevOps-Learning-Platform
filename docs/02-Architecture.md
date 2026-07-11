@@ -1,36 +1,37 @@
-# Architecture — Project 4: GitOps with Argo CD
+# Architecture — Project 5: Centralized Logging (ELK)
 
-Full detail lives in [`/architecture`](../architecture/README.md) — this
-page is the short version.
+Full detail lives in [`/architecture`](../architecture/README.md) and
+[`/architecture/log-flow.md`](../architecture/log-flow.md) — this page is
+the short version.
 
-## New layer: `gitops/`
-
-```
-gitops/argocd/values.yaml                       → how Argo CD itself is installed
-gitops/projects/enterprise-devops-project.yaml   → what Argo CD is allowed to touch
-gitops/applications/enterprise-app.yaml          → the desired-state declaration
-```
-
-See [`architecture/pipeline-diagram.md`](../architecture/pipeline-diagram.md)
-for the full flow and the self-healing reconciliation loop diagram.
-
-## What each pipeline stage does now vs. Project 3
+## Two independent Argo CD Applications now
 
 ```
-Project 3: ... -> Docker Build -> Push Image -> Helm Upgrade (Jenkins deploys) -> Verify (Jenkins checks kubectl rollout)
-Project 4: ... -> Docker Build -> Trivy Scan -> Push Image -> Update GitOps Values (commit+push) -> Wait for Argo CD Sync (Jenkins asks Argo CD's status)
+gitops/applications/enterprise-app.yaml   → helm/enterprise-app     → namespace: enterprise-devops
+gitops/applications/logging-stack.yaml    → logging/elk-stack       → namespace: logging
 ```
 
-The "Verify"-shaped stage still exists (`Wait for Argo CD Sync`), but its
-nature changed completely: it's a read-only status poll against the Argo
-CD API, not a `kubectl rollout status` against the cluster Jenkins itself
-just modified.
+Neither knows the other exists. `logging-stack` watches container logs
+across `enterprise-devops` (via Filebeat's namespace filter in
+`logging/elk-stack/values.yaml`), but that's an application-layer
+concern (which logs Filebeat ships), not a Kubernetes/Argo CD dependency
+between the two Applications.
 
-## New security scanning layer
+## Backend logging layers (new)
 
 ```
-backend/Jenkinsfile:  OWASP Dependency Check (Maven deps) -> Trivy (image) -> Docker Scout (image, optional)
-frontend/Jenkinsfile: npm audit (npm deps)                -> Trivy (image) -> Docker Scout (image, optional)
+logback-spring.xml          → JSON (prod) vs plain text (dev) console output
+filter/RequestLoggingFilter → wraps every HTTP request: method/uri/status/durationMs, WARN if slow
+exception/GlobalExceptionHandler → WARN for expected client errors, ERROR+stacktrace for real failures
+```
+
+## ELK chart layers
+
+```
+logging/elk-stack/charts/elasticsearch/  → StatefulSet + PVC (log store)
+logging/elk-stack/charts/logstash/       → Deployment (parse + tag + index)
+logging/elk-stack/charts/filebeat/       → DaemonSet + RBAC (log shipper)
+logging/elk-stack/charts/kibana/         → Deployment + Ingress/TLS (UI)
 ```
 
 ## Next
