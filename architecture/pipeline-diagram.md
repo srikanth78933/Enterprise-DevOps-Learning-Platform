@@ -30,6 +30,82 @@ flowchart TD
     B10 -.->|"same Helm release,\ndifferent --set key"| F6
 ```
 
+## Stage-by-stage detail
+
+`backend/Jenkinsfile`, start to finish:
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant GH as Git Repository
+    participant J as Jenkins (backend/Jenkinsfile)
+    participant SQ as SonarQube
+    participant DH as Docker Hub
+    participant Helm as Helm / EKS
+
+    Dev->>GH: git push (backend change)
+    GH-->>J: webhook / poll triggers build
+    J->>J: Checkout
+    J->>J: Maven Build (compile + versions:set stamps 1.0.0-<build#>)
+    J->>J: Unit Test (mvn test - JUnit + Mockito)
+    J->>SQ: mvn sonar:sonar (submit analysis)
+    SQ-->>J: webhook callback with Quality Gate result
+    alt Quality Gate failed
+        J-->>Dev: Build marked FAILURE, pipeline aborted
+    else Quality Gate passed
+        par Parallel Stage
+            J->>J: Publish JaCoCo coverage report
+        and
+            J->>J: mvn dependency:tree audit
+        end
+        J->>J: mvn package -DskipTests (jar archived)
+        J->>J: docker build -f backend-ci.Dockerfile
+        J->>DH: docker push (versioned tag + latest)
+        DH-->>J: push acknowledged
+        J->>J: helm package helm/enterprise-app --version 1.0.0-<build>
+        J->>DH: helm push (OCI chart artifact)
+        DH-->>J: chart push acknowledged
+        J->>Helm: helm upgrade --reuse-values --set backend.image.tag=<tag>
+        Helm-->>J: backend Deployment rolled out (frontend untouched)
+        J->>J: kubectl rollout status deployment/backend
+        J->>J: scripts/verify-backend.sh (curl /api/health through Ingress)
+        J-->>Dev: Build marked SUCCESS
+    end
+```
+
+`frontend/Jenkinsfile`, start to finish:
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant GH as Git Repository
+    participant J as Jenkins (frontend/Jenkinsfile)
+    participant DH as Docker Hub
+    participant Helm as Helm / EKS
+
+    Dev->>GH: git push (frontend change)
+    GH-->>J: webhook / poll triggers build
+    J->>J: Checkout
+    J->>J: Install & Test (npm ci, npm test)
+    J->>J: Build (npm run build, REACT_APP_API_BASE_URL=/api baked in)
+    J->>J: docker build -f frontend-ci.Dockerfile
+    J->>DH: docker push (versioned tag + latest)
+    DH-->>J: push acknowledged
+    J->>J: helm package helm/enterprise-app --version 1.0.0-<build>
+    J->>DH: helm push (OCI chart artifact)
+    DH-->>J: chart push acknowledged
+    J->>Helm: helm upgrade --reuse-values --set frontend.image.tag=<tag>
+    Helm-->>J: frontend Deployment rolled out (backend untouched)
+    J->>J: kubectl rollout status deployment/frontend
+    J->>J: scripts/verify-frontend.sh (curl / through Ingress)
+    J-->>Dev: Build marked SUCCESS
+```
+
+Notice what's missing from the frontend sequence compared to the
+backend one: no SonarQube, no Quality Gate. `frontend/Jenkinsfile` never
+declared that gate in the first place (per `jenkins/README.md` step 3) —
+only the backend pipeline enforces a quality bar before shipping.
+
 ## Why splitting pipelines matters (the actual lesson)
 
 In Project 2's single Jenkinsfile, a frontend-only CSS tweak still had to
