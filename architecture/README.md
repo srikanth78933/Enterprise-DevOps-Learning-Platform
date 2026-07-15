@@ -1,7 +1,8 @@
 # Architecture — Project 4: GitOps with Argo CD
 
-This project doesn't change the AWS infrastructure (`terraform/`, still
-Project 2's cluster) or the Helm chart's *shape* (`helm/enterprise-app/`,
+This project doesn't change the AWS infrastructure (the same existing EKS
+cluster, provisioned and managed outside this repo — no `terraform/` here,
+same as Projects 2-3) or the Helm chart's *shape* (`helm/enterprise-app/`,
 still Project 3's frontend/backend/mysql subcharts). What changes is who's
 allowed to deploy: Jenkins loses cluster credentials entirely, and Argo CD
 becomes the only path from "declared in Git" to "running in the cluster."

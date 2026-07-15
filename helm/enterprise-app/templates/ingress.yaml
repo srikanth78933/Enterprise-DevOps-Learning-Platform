@@ -12,7 +12,15 @@ metadata:
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
-    - host: {{ .Values.global.ingressHost | quote }}
+    # global.ingressHost is empty by default - omitting `host:` entirely
+    # matches any Host header, so the raw Load Balancer hostname works
+    # directly in a browser with zero client-side setup (no hosts-file
+    # entry, no DNS). Set global.ingressHost (see values-prod.yaml.example)
+    # once you have a real domain pointed at the Load Balancer, to route
+    # only that hostname instead.
+    - {{- if .Values.global.ingressHost }}
+      host: {{ .Values.global.ingressHost | quote }}
+      {{- end }}
       http:
         paths:
           - path: /api

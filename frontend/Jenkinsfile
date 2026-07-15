@@ -7,6 +7,13 @@
 // Same key change as backend/Jenkinsfile: no cluster access, no AWS
 // credentials, no `helm upgrade` - ends at a Git commit that Argo CD
 // picks up. See gitops/README.md.
+//
+// Wired to this deployment's actual infrastructure:
+//   - Docker Hub:    docker.io/devopstraining064
+//   - Argo CD server: set ARGOCD_SERVER below to the LoadBalancer hostname
+//     printed by `kubectl get svc argocd-server -n argocd` after running
+//     scripts/argocd-install.sh (a one-time value - it doesn't change
+//     unless the Service is recreated).
 
 pipeline {
     agent any
@@ -22,11 +29,13 @@ pipeline {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         ARGOCD_AUTH_TOKEN     = credentials('argocd-auth-token')
 
-        ARGOCD_SERVER   = 'localhost:8080'
+        // TODO: replace with the real argocd-server LoadBalancer hostname
+        // (see header comment above) - a placeholder can't be discovered
+        // automatically since Jenkins has no kubectl access to look it up.
+        ARGOCD_SERVER   = '<argocd-lb-hostname>'
         GIT_BRANCH_NAME = 'project-04-gitops-argocd'
 
-        FRONTEND_IMAGE = 'yourdockerhubuser/enterprise-devops-frontend'
-        IMAGE_TAG      = "${env.BUILD_NUMBER}"
+        FRONTEND_IMAGE = 'devopstraining064/enterprise-devops-frontend'
     }
 
     stages {
@@ -42,6 +51,16 @@ pipeline {
                 dir('frontend') {
                     sh 'npm ci'
                     sh 'CI=true npm test'
+                    script {
+                        // IMAGE_TAG is this pipeline's own package.json version plus
+                        // its own build number, e.g. 1.0.0-9 - same technique as
+                        // project-03.
+                        def pkgVersion = sh(
+                            script: "node -p \"require('./package.json').version\"",
+                            returnStdout: true
+                        ).trim()
+                        env.IMAGE_TAG = "${pkgVersion}-${env.BUILD_NUMBER}"
+                    }
                 }
             }
         }
@@ -68,7 +87,14 @@ pipeline {
         stage('Build') {
             steps {
                 dir('frontend') {
-                    sh 'CI=true npm run build'
+                    // Relative path, not an absolute hostname - React inlines this
+                    // at build time, and the Ingress serves both frontend and
+                    // backend on the same host, so a relative baseURL resolves
+                    // correctly no matter what hostname the browser used, and
+                    // never needs CORS (same origin). Found as a real bug on
+                    // project-03: an absolute/missing value here means every
+                    // deployed user's browser tries to reach localhost:8080.
+                    sh 'CI=true REACT_APP_API_BASE_URL=/api npm run build'
                 }
             }
             post {

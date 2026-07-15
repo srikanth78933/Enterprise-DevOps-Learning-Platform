@@ -37,13 +37,7 @@ kubectl delete secret backend-secret mysql-secret -n enterprise-devops
 kubectl delete pvc mysql-pvc -n enterprise-devops
 ```
 
-## 6. Destroy the AWS infrastructure
-
-```bash
-./scripts/terraform-destroy.sh
-```
-
-## 7. Revoke tokens created for this project
+## 6. Revoke tokens created for this project
 
 - The Argo CD `jenkins-ci` account token
   (`argocd account delete-token jenkins-ci <token-id>`)

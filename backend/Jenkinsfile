@@ -9,6 +9,13 @@
 // at all - no `kubectl`, no `helm upgrade`, no AWS credentials. It ends by
 // committing a new image tag to Git; Argo CD (watching the repo) does the
 // actual deploy. See gitops/README.md for the full picture.
+//
+// Wired to this deployment's actual infrastructure:
+//   - Docker Hub:    docker.io/devopstraining064
+//   - Argo CD server: set ARGOCD_SERVER below to the LoadBalancer hostname
+//     printed by `kubectl get svc argocd-server -n argocd` after running
+//     scripts/argocd-install.sh (a one-time value - it doesn't change
+//     unless the Service is recreated).
 
 pipeline {
     agent any
@@ -30,11 +37,13 @@ pipeline {
         ARGOCD_AUTH_TOKEN     = credentials('argocd-auth-token')
 
         SONARQUBE_ENV    = 'sonarqube-server'
-        ARGOCD_SERVER    = 'localhost:8080'
+        // TODO: replace with the real argocd-server LoadBalancer hostname
+        // (see header comment above) - a placeholder can't be discovered
+        // automatically since Jenkins has no kubectl access to look it up.
+        ARGOCD_SERVER    = '<argocd-lb-hostname>'
         GIT_BRANCH_NAME  = 'project-04-gitops-argocd'
 
-        BACKEND_IMAGE = 'yourdockerhubuser/enterprise-devops-backend'
-        IMAGE_TAG     = "${env.BUILD_NUMBER}"
+        BACKEND_IMAGE = 'devopstraining064/enterprise-devops-backend'
     }
 
     stages {
@@ -48,6 +57,17 @@ pipeline {
         stage('Maven Build') {
             steps {
                 dir('backend') {
+                    script {
+                        // IMAGE_TAG is this pipeline's own pom.xml version plus its own
+                        // build number, e.g. 1.0.0-17 - same technique as project-03,
+                        // still meaningful here since backend/frontend are still two
+                        // independently-versioned Jenkins jobs.
+                        def devVersion = sh(
+                            script: "mvn -B -ntp -q -DforceStdout help:evaluate -Dexpression=project.version",
+                            returnStdout: true
+                        ).trim()
+                        env.IMAGE_TAG = "${devVersion.replace('-SNAPSHOT', '')}-${env.BUILD_NUMBER}"
+                    }
                     sh 'mvn -B -ntp clean compile'
                 }
             }

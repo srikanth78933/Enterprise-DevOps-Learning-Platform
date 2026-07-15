@@ -2,8 +2,12 @@
 # override that subchart's own values.yaml at the same path. `global` is a
 # Helm-special key merged into every subchart's .Values.global automatically.
 
+# Empty by default: the Ingress then matches any Host header, so the raw
+# Load Balancer hostname works directly in a browser with zero client-side
+# setup. Set this once you have a real domain pointed at the Load Balancer
+# (see values-prod.yaml.example) to restrict routing to just that host.
 global:
-  ingressHost: enterprise-devops.example.com
+  ingressHost: ""
 
 ingress:
   enabled: true
@@ -13,13 +17,13 @@ ingress:
 frontend:
   replicaCount: 2
   image:
-    repository: yourdockerhubuser/enterprise-devops-frontend
+    repository: devopstraining064/enterprise-devops-frontend
     tag: latest
 
 backend:
   replicaCount: 2
   image:
-    repository: yourdockerhubuser/enterprise-devops-backend
+    repository: devopstraining064/enterprise-devops-backend
     tag: latest
   autoscaling:
     enabled: true

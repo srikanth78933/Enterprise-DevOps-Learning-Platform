@@ -1,7 +1,7 @@
 replicaCount: 2
 
 image:
-  repository: yourdockerhubuser/enterprise-devops-frontend
+  repository: devopstraining064/enterprise-devops-frontend
   tag: latest
   pullPolicy: IfNotPresent
 

@@ -73,7 +73,7 @@ helm install enterprise-app helm/enterprise-app -n enterprise-devops --create-na
 # Bump one service's tag by hand (fights Argo CD's selfHeal if run against
 # a cluster Argo CD manages - see scripts/helm-upgrade-backend.sh's header):
 helm upgrade enterprise-app helm/enterprise-app -n enterprise-devops \
-  --reuse-values --set backend.image.tag=<build-number>
+  --reuse-values --set backend.image.tag=<pom-version>-<build-number>
 
 helm uninstall enterprise-app -n enterprise-devops
 ```

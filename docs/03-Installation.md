@@ -10,14 +10,25 @@ running, that's fine — Argo CD will adopt it.
 ./scripts/argocd-install.sh
 ```
 
-Note the admin password it prints. Port-forward and log in to confirm it
-came up:
+Note the admin password it prints. `argocd-server` is exposed as a
+`LoadBalancer` (see `gitops/argocd/values.yaml` for why — Jenkins has no
+`kubectl` access in this project, so it needs a directly-reachable
+endpoint, not just a port-forward target). Get its address:
 
 ```bash
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-# in another terminal / browser:
-open https://localhost:8080
+kubectl get svc argocd-server -n argocd
 ```
+
+Open `https://<that-address>` in a browser (login: `admin` / the password
+above) to confirm it came up. **Note this address down** — edit
+`ARGOCD_SERVER` in both `backend/Jenkinsfile` and `frontend/Jenkinsfile`
+to this value (see the `TODO` comment at the top of each), and you'll
+need it again for `jenkins/README.md` step 10.
+
+(You can still `kubectl port-forward svc/argocd-server -n argocd 8080:443`
+for local-only access if you'd rather not use the LoadBalancer address
+directly — either works for a human; only Jenkins actually requires the
+LoadBalancer.)
 
 ## 2. Point the Application at your fork
 

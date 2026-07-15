@@ -7,19 +7,25 @@
 
 configs:
   params:
-    # Serves the UI/API over plain HTTP behind the LoadBalancer/port-forward
-    # used in this tutorial, instead of requiring a real TLS cert up front.
-    # Terminate TLS properly (via the Ingress or a cert-manager-issued
-    # cert) before exposing this beyond your own machine.
+    # Auto-generates a self-signed cert instead of requiring a real one up
+    # front. `argocd login --insecure` skips verifying it - that's what
+    # "insecure" means here, not "no TLS at all" (the API is still served
+    # over HTTPS on port 443).
     server.insecure: true
 
 server:
   service:
-    type: ClusterIP
-    # Accessed via `kubectl port-forward` in this project (see
-    # docs/03-Installation.md) rather than an Ingress/LoadBalancer, to
-    # avoid provisioning a second Load Balancer alongside the one
-    # ingress-nginx already created in Project 2.
+    # LoadBalancer, not ClusterIP: this project's whole point is that
+    # Jenkins has zero kubectl/cluster credentials (see
+    # architecture/README.md), so it has no way to `kubectl port-forward`
+    # to a ClusterIP service to reach the Argo CD API - it needs a real,
+    # directly-reachable network endpoint. Costs a second small Load
+    # Balancer alongside ingress-nginx's, which is the tradeoff for
+    # Jenkins genuinely having no cluster access rather than just
+    # pretending to (a ClusterIP-only setup would force Jenkins to keep
+    # some form of kubectl access just to reach this one endpoint,
+    # defeating the actual point of this project).
+    type: LoadBalancer
 
 controller:
   resources:

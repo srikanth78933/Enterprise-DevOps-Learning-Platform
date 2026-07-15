@@ -18,8 +18,7 @@ TAG="${1:?Usage: helm-upgrade-frontend.sh <image-tag>}"
 helm upgrade --install "${RELEASE}" "${ROOT_DIR}/helm/enterprise-app" \
   -n "${NAMESPACE}" --create-namespace \
   --reuse-values \
-  --set frontend.image.tag="${TAG}" \
-  --wait --timeout 5m
+  --set frontend.image.tag="${TAG}"
 
 kubectl rollout status deployment/frontend -n "${NAMESPACE}" --timeout=180s
 "${ROOT_DIR}/scripts/verify-frontend.sh"
