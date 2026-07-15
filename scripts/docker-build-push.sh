@@ -4,11 +4,11 @@
 # wiring up Jenkins, or for manual releases.
 #
 # Usage:
-#   IMAGE_NAME=yourdockerhubuser/enterprise-devops-backend ./scripts/docker-build-push.sh [tag]
+#   IMAGE_NAME=devopstraining064/enterprise-devops-backend ./scripts/docker-build-push.sh [tag]
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-IMAGE_NAME="${IMAGE_NAME:-yourdockerhubuser/enterprise-devops-backend}"
+IMAGE_NAME="${IMAGE_NAME:-devopstraining064/enterprise-devops-backend}"
 TAG="${1:-local}"
 
 echo "==> Packaging jar"
