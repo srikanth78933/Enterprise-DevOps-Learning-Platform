@@ -20,8 +20,8 @@ Manage Jenkins → Tools:
 
 | Tool type | Name (must match `backend/Jenkinsfile`) | Version |
 |---|---|---|
-| JDK | `jdk21` | Temurin 21 |
-| Maven | `maven3` | 3.9.x |
+| JDK | `java21` | Temurin 21 |
+| Maven | `maven3.9.16` | 3.9.16 |
 
 ## 3. Configure the SonarQube server
 
