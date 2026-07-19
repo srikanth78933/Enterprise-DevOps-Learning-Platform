@@ -8,7 +8,7 @@ Full diagrams: [`/architecture/pipeline-diagram.md`](../architecture/pipeline-di
 |---|---|---|
 | Docker Build | `docker build` | Dockerfile fails |
 | Push Docker Image | `docker push` (x2 tags) | Docker Hub auth/network failure |
-| Deploy to EKS | `aws eks update-kubeconfig` → `kubectl apply -k` → `kubectl set image` | AWS auth failure, cluster unreachable, invalid manifest |
+| Deploy to EKS | `aws eks update-kubeconfig` → `kubectl apply -k` → (re)create `backend-secret`/`mysql-secret` → `kubectl set image` | AWS auth failure, cluster unreachable, invalid manifest |
 | Verify | `kubectl rollout status`, then `scripts/verify-deployment.sh` | Rollout doesn't complete in 180s, or the smoke test curl fails |
 
 ## Why the image tag includes the release version
@@ -55,6 +55,34 @@ sequenceDiagram
     AWS-->>JF: kubeconfig for the cluster
     JF->>EKS: kubectl apply -k / kubectl set image (authenticated via the kubeconfig)
 ```
+
+## Credential flow (new: app database secrets)
+
+`backend-secret`/`mysql-secret` are never committed (see
+`kubernetes/secret.example.yaml`) and don't exist on a freshly-created
+cluster. Rather than a manual `kubectl create secret` step someone has to
+remember after every `terraform apply`, "Deploy to EKS" (re)creates them
+on every single deploy, via `kubectl create ... --dry-run=client -o yaml |
+kubectl apply -f -` — idempotent, so this is a silent no-op once they
+already exist with the same values.
+
+```mermaid
+sequenceDiagram
+    participant JF as Jenkinsfile
+    participant JC as Jenkins Credential Store
+    participant EKS as EKS API Server
+
+    JF->>JC: credentials('app-db-password' / 'app-mysql-root-password')
+    JC-->>JF: DB_PASSWORD / MYSQL_ROOT_PASSWORD (masked in logs)
+    JF->>EKS: kubectl apply -f - (backend-secret: DB_USERNAME + DB_PASSWORD)
+    JF->>EKS: kubectl apply -f - (mysql-secret: MYSQL_USER + DB_PASSWORD + MYSQL_ROOT_PASSWORD)
+```
+
+`DB_PASSWORD` is intentionally the *same* value in both secrets — the
+backend authenticates to mysql as `devops_user`, and mysql's own
+`MYSQL_USER`/`MYSQL_PASSWORD` env vars are what actually create that user.
+Different values in each secret means the backend can never connect, with
+no error until you actually watch the pod fail to reach the database.
 
 ## Next
 

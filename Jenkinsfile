@@ -34,6 +34,11 @@ pipeline {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        // Used by the "Deploy to EKS" stage to (re)create backend-secret/
+        // mysql-secret on every deploy - see that stage for why this lives
+        // here instead of in Terraform.
+        DB_PASSWORD          = credentials('app-db-password')
+        MYSQL_ROOT_PASSWORD  = credentials('app-mysql-root-password')
 
         SONARQUBE_ENV   = 'sonarqube-server'
         AWS_REGION      = 'us-east-1'
@@ -159,7 +164,35 @@ pipeline {
                     aws eks update-kubeconfig --name ${EKS_CLUSTER_NAME} --region ${AWS_REGION}
 
                     kubectl apply -k kubernetes/
+                """
 
+                // backend-secret/mysql-secret are never committed to git (see
+                // kubernetes/secret.example.yaml), and a fresh cluster has
+                // neither - every prior deploy against a just-recreated
+                // cluster stalled at "CreateContainerConfigError: secret ...
+                // not found" until someone noticed and created them by hand.
+                // (Re)creating them here, every deploy, makes that a non-issue
+                // permanently - kubectl apply is idempotent, so this is a
+                // no-op update on a cluster that already has them.
+                //
+                // DB_PASSWORD is shared between the two secrets on purpose:
+                // the backend authenticates to mysql as the same user mysql
+                // itself creates from MYSQL_USER/MYSQL_PASSWORD - using
+                // different values here means the backend can never connect.
+                sh """
+                    kubectl create secret generic backend-secret -n ${K8S_NAMESPACE} \
+                        --from-literal=DB_USERNAME=devops_user \
+                        --from-literal=DB_PASSWORD="\$DB_PASSWORD" \
+                        --dry-run=client -o yaml | kubectl apply -f -
+
+                    kubectl create secret generic mysql-secret -n ${K8S_NAMESPACE} \
+                        --from-literal=MYSQL_USER=devops_user \
+                        --from-literal=MYSQL_PASSWORD="\$DB_PASSWORD" \
+                        --from-literal=MYSQL_ROOT_PASSWORD="\$MYSQL_ROOT_PASSWORD" \
+                        --dry-run=client -o yaml | kubectl apply -f -
+                """
+
+                sh """
                     kubectl set image deployment/backend backend=${BACKEND_IMAGE}:${IMAGE_TAG} \
                         -n ${K8S_NAMESPACE}
                 """

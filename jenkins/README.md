@@ -89,6 +89,20 @@ Manage Jenkins → Credentials → add two "Secret text" credentials:
 STS credentials via an OIDC-federated Jenkins identity instead of a static
 IAM user key — a Project 10 concern.)
 
+## 8b. Add app database credentials
+
+The "Deploy to EKS" stage (re)creates `backend-secret`/`mysql-secret` on
+every deploy — see that stage's comment for why this lives in Jenkins
+rather than Terraform or a committed file. Manage Jenkins → Credentials →
+add two more "Secret text" credentials:
+
+- ID: `app-db-password` — value: any strong password (this becomes both the
+  backend's `DB_PASSWORD` and mysql's `MYSQL_PASSWORD` for the same
+  `devops_user` — they must match, or the backend can never authenticate)
+- ID: `app-mysql-root-password` — value: a separate strong password for
+  mysql's root account (only mysql itself uses this; the backend never
+  needs it)
+
 ## 9. Install `kubectl` and the `aws` CLI on the agent
 
 ```bash

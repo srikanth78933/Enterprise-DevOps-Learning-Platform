@@ -106,6 +106,11 @@ host` right after this step is expected, not a failure; retry shortly.
 
 ## 5. Create the real secrets (never commit these)
 
+If you're deploying through the Jenkins pipeline, the "Deploy to EKS" stage
+now does this for you on every run (see `jenkins/README.md` step 8b for the
+two credentials it needs) - the steps below are only for a manual/local
+deploy via `scripts/deploy-to-eks.sh`.
+
 ```bash
 kubectl create namespace enterprise-devops --dry-run=client -o yaml | kubectl apply -f -
 
