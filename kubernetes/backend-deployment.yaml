@@ -20,7 +20,7 @@ spec:
           # Replaced at deploy time by the Jenkins "Deploy to EKS" stage
           # (kubectl set image) - see docs/05-Flow.md. This placeholder tag
           # exists so the manifest is valid on its own for `kubectl apply -f`.
-          image: yourdockerhubuser/enterprise-devops-backend:latest
+          image: devopstraining064/enterprise-devops-backend:latest
           ports:
             - containerPort: 8080
           envFrom:

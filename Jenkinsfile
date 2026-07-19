@@ -36,8 +36,8 @@ pipeline {
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
 
         SONARQUBE_ENV   = 'sonarqube-server'
-        AWS_REGION      = 'eu-west-3'
-        EKS_CLUSTER_NAME = 'eks-cluster'
+        AWS_REGION      = 'us-east-1'
+        EKS_CLUSTER_NAME = 'mycompany-dev-eks'
         K8S_NAMESPACE   = 'enterprise-devops'
 
         BACKEND_IMAGE   = 'devopstraining064/enterprise-devops-backend'

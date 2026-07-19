@@ -9,7 +9,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 NAMESPACE="${K8S_NAMESPACE:-enterprise-devops}"
-BACKEND_IMAGE="${BACKEND_IMAGE:-yourdockerhubuser/enterprise-devops-backend}"
+BACKEND_IMAGE="${BACKEND_IMAGE:-devopstraining064/enterprise-devops-backend}"
 TAG="${1:-latest}"
 
 echo "==> Applying baseline manifests (namespace, config, services, HPA, ingress)"

@@ -23,5 +23,5 @@ resources:
   - ingress.yaml
 
 images:
-  - name: yourdockerhubuser/enterprise-devops-backend
+  - name: devopstraining064/enterprise-devops-backend
     newTag: latest
