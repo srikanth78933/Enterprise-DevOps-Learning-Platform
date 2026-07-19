@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.4</version>
+        <version>3.3.13</version>
         <relativePath/>
     </parent>
 
@@ -24,6 +24,10 @@
         <maven.compiler.target>21</maven.compiler.target>
         <sonar.projectKey>enterprise-devops-backend</sonar.projectKey>
         <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+        <!-- Spring Boot 3.3.13's managed Tomcat (10.1.42) still carries
+             CVE-2026-41293/43512/43515 - override to the patched line
+             until the parent's dependency management catches up. -->
+        <tomcat.version>10.1.55</tomcat.version>
     </properties>
 
     <dependencies>

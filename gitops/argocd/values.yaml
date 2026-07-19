@@ -26,6 +26,11 @@ server:
     # some form of kubectl access just to reach this one endpoint,
     # defeating the actual point of this project).
     type: LoadBalancer
+    annotations:
+      # Without this, the AWS Load Balancer Controller defaults to an
+      # internal-scheme NLB even when public ELB-tagged subnets exist -
+      # unreachable from Jenkins (which lives outside the cluster VPC).
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
 
 controller:
   resources:

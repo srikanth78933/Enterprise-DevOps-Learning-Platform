@@ -8,6 +8,13 @@ COPY frontend/ .
 RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime
+
+# The nginx:1.27-alpine tag itself lags behind Alpine's own package repo for
+# security patches (e.g. openssl/libssl3 CVEs fixed upstream in Alpine days
+# before nginx rebuilds the image) - pull current packages at build time
+# instead of trusting the base image snapshot.
+RUN apk update && apk upgrade --no-cache
+
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /build/build /usr/share/nginx/html
 EXPOSE 80
